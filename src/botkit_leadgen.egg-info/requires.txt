@@ -1,0 +1,15 @@
+aiogram<4,>=3.15
+aiosqlite>=0.20
+sqlalchemy[asyncio]>=2.0
+alembic>=1.14
+redis>=5.0
+httpx>=0.28
+pydantic-settings>=2.0
+structlog>=24.0
+
+[dev]
+ruff>=0.8
+mypy>=1.13
+pytest>=8
+pytest-cov>=6
+pytest-asyncio>=0.25
