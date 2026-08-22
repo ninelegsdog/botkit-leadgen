@@ -2,6 +2,7 @@ version: "3.8"
 
 services:
   bot:
+    image: botkit-leadgen:1.0.0
     build: .
     restart: unless-stopped
     env_file: .env
