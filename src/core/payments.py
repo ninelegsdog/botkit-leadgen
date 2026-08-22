@@ -33,11 +33,11 @@ class YooKassaPaymentProvider(PaymentProvider):
     async def create_payment(
         self, *, title: str, description: str, payload: str, amount: int, currency: str = "RUB"
     ) -> str:
-        from yookassa import Payment  # type: ignore[import-not-found]
+        from yookassa import Payment  # type: ignore[import-untyped]
 
         payment = Payment.create(
             {
-                "amount": {"value": str(amount / 100), "currency": currency},
+                "amount": {"value": f"{amount / 100:.2f}", "currency": currency},
                 "confirmation": {"type": "redirect", "return_url": "https://t.me/"},
                 "capture": True,
                 "description": description,

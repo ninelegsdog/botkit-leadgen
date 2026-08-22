@@ -141,7 +141,7 @@ def create_leadgen_router(state: AppState) -> Router:
         if not success:
             await callback.answer("Лид уже взят другим менеджером.", show_alert=True)
             return
-        state.metrics.inc_taken()
+        state.metrics.inc_leads_taken()
         await callback.answer("✅ Вы взяли лид!")
         lead = await service.get_lead(db, lead_id)
         if lead:
