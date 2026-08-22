@@ -1,12 +1,10 @@
 FROM python:3.12-slim AS base
-RUN groupadd -r app && useradd -r -g app -d /app -s /sbin/nologin app
+RUN useradd -m -u 1001 botuser
 WORKDIR /app
-COPY requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
-COPY src/ src/
-COPY migrations/ migrations/
-COPY alembic.ini .
+COPY --chown=botuser:botuser pyproject.toml .
+COPY --chown=botuser:botuser src/ src/
+RUN pip install --no-cache-dir .
 USER 1001:1001
-HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import httpx; httpx.get('http://localhost:8080/health').raise_for_status()"
-EXPOSE 8080
+HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import httpx; httpx.get('http://localhost:8082/health').raise_for_status()"
+EXPOSE 8082
 CMD ["python", "-m", "src.bot"]
