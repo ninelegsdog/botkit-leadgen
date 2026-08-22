@@ -1,0 +1,66 @@
+name: Deploy to VPS
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+env:
+  APP_DIR: /opt/leadgen
+
+jobs:
+  test:
+    uses: ./.github/workflows/ci.yml
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.VPS_USER }}
+          key: ${{ secrets.VPS_SSH_KEY }}
+          script: |
+            set -e
+            cd /opt/leadgen
+
+            PREV_SHA=$(git rev-parse --short HEAD)
+
+            git fetch --tags && git checkout "$(git describe --tags --abbrev=0)"
+
+            if ! docker compose build; then
+              echo "Build failed. Rolling back to ${PREV_SHA}"
+              git reset --hard "${PREV_SHA}"
+              docker compose build
+            fi
+
+            docker compose up -d
+
+            HEALTHY=""
+            for i in $(seq 1 12); do
+              if curl -fs http://127.0.0.1:8082/health >/dev/null; then
+                HEALTHY=1
+                break
+              fi
+              echo "Health check attempt ${i}/12, waiting..."
+              sleep 5
+            done
+
+            if [ -z "$HEALTHY" ]; then
+              echo "Health check failed. Rolling back to ${PREV_SHA}"
+              git reset --hard "${PREV_SHA}"
+              docker compose build
+              docker compose up -d
+              sleep 10
+              curl -fs http://127.0.0.1:8082/health || exit 1
+            fi
+
+            docker compose ps
+            echo "Deployment successful"
+
+      - name: Notify failure
+        if: failure()
+        run: echo "::error::Deployment failed"
