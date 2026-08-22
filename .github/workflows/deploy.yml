@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  APP_DIR: /opt/leadgen
+  APP_DIR: /home/deploy/botkit-leadgen
 
 jobs:
   test:
@@ -25,7 +25,7 @@ jobs:
           key: ${{ secrets.VPS_SSH_KEY }}
           script: |
             set -e
-            cd /opt/leadgen
+            cd /home/deploy/botkit-leadgen
 
             PREV_SHA=$(git rev-parse --short HEAD)
 
