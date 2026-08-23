@@ -70,7 +70,7 @@ async def health(request: web.Request) -> web.Response:
 
 
 async def metrics(request: web.Request) -> web.Response:
-    return web.Response(body=generate_latest(), content_type=CONTENT_TYPE_LATEST)
+    return web.Response(body=generate_latest(), headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 def create_metrics_app() -> web.Application:
