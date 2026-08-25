@@ -1,12 +1,7 @@
-.env
+.venv/
 __pycache__/
 *.pyc
-.venv/
-data/
-*.db
-dist/
-.eggs/
-.mypy_cache/
-.ruff_cache/
-.pytest_cache/
 .coverage
+.pytest_cache/
+data/
+.env
