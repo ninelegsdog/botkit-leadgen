@@ -6,11 +6,31 @@ on:
       - "v*"
   workflow_dispatch:
 
+permissions:
+  contents: read
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    env:
+      PORT: 8084
+      BOT: botkit-leadgen
     steps:
-      - name: deploy to vps
+      - uses: actions/checkout@v4
+
+      - name: setup ssh key
+        run: |
+          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > /tmp/vps_key
+          chmod 600 /tmp/vps_key
+
+      - name: build image
+        run: docker build --build-arg PORT=${{ env.PORT }} -t botkit-deploy:local .
+
+      - name: transfer image to vps
+        run: |
+          docker save botkit-deploy:local | ssh -o StrictHostKeyChecking=no -i /tmp/vps_key ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'docker load'
+
+      - name: run on vps
         uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
@@ -21,37 +41,22 @@ jobs:
             set -e
             BOT="botkit-leadgen"
             PORT=8084
-            BUILD_DIR=/home/deploy/$BOT
-            ENV_FILE=/home/algtro/BOTOGRAD_TECH/$BOT/.env
-            IMAGE=botkit/$BOT:latest
+            IMAGE=botkit/${BOT}:latest
             PREV="${IMAGE%latest}prev"
-            # snapshot current production image for rollback
+            ENV_FILE=/home/algtro/BOTOGRAD_TECH/${BOT}/.env
+            docker tag botkit-deploy:local "$IMAGE"
             docker tag "$IMAGE" "$PREV" 2>/dev/null || true
-            # refresh source from github main
-            if [ -d "$BUILD_DIR/.git" ]; then
-              cd "$BUILD_DIR"
-              git fetch origin
-              git checkout -f origin/main
-              git reset --hard origin/main
-            else
-              git clone --depth 1 -b main "https://github.com/ninelegsdog/$BOT.git" "$BUILD_DIR"
-            fi
-            # build new image
-            docker build --build-arg PORT=$PORT -t "$IMAGE" "$BUILD_DIR"
-            # replace running container
             docker rm -f "$BOT" || true
-            mkdir -p /opt/botkit/data/$BOT
-            docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/$BOT:/data -e PORT=$PORT --env-file "$ENV_FILE" "$IMAGE"
-            # health check
+            mkdir -p /opt/botkit/data/${BOT}
+            docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$IMAGE"
             ok=0
             for i in $(seq 1 12); do
               if curl -fs "http://127.0.0.1:${PORT}/health"; then ok=1; break; fi
               sleep 5
             done
             if [ "$ok" -eq 0 ]; then
-              echo "Health check failed. Rolling back to $PREV"
               docker rm -f "$BOT" || true
-              docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/$BOT:/data -e PORT=$PORT --env-file "$ENV_FILE" "$PREV"
-              exit 1
+              docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$PREV"
+              echo "HEALTH FAILED - rolled back"; exit 1
             fi
             echo "Deploy of $BOT OK"
