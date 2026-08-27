@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   deploy:
@@ -17,6 +18,21 @@ jobs:
       BOT: botkit-leadgen
     steps:
       - uses: actions/checkout@v4
+
+      - name: require green CI
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for i in $(seq 1 30); do
+            concl=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
+              --workflow ci.yml --limit 1 --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
+            if [ "$concl" = "success" ]; then echo "CI green for $GITHUB_SHA"; exit 0; fi
+            if [ "$concl" = "failure" ] || [ "$concl" = "cancelled" ] || [ "$concl" = "timed_out" ]; then
+              echo "CI is RED ($concl) for $GITHUB_SHA - abort deploy"; exit 1
+            fi
+            echo "CI status='${concl:-none}' yet, waiting..."; sleep 15
+          done
+          echo "CI status unknown for $GITHUB_SHA after timeout - abort deploy"; exit 1
 
       - name: setup ssh key
         run: |
@@ -60,4 +76,9 @@ jobs:
               fi
               echo "HEALTH FAILED - rolled back to $OLD_IMAGE"; exit 1
             fi
-            echo "Deploy of $BOT OK"
+            DEPLOYED_ID=$(docker inspect --format '{{.Id}}' "$IMAGE")
+            RUN_ID=$(docker inspect --format '{{.Image}}' "$BOT")
+            if [ "$DEPLOYED_ID" != "$RUN_ID" ]; then
+              echo "DIGEST MISMATCH: container runs $RUN_ID but deployed $DEPLOYED_ID"; exit 1
+            fi
+            echo "Deploy of $BOT OK (image $DEPLOYED_ID)"
