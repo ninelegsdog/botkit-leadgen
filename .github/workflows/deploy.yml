@@ -24,11 +24,11 @@ jobs:
           chmod 600 /tmp/vps_key
 
       - name: build image
-        run: docker build --build-arg PORT=${{ env.PORT }} -t botkit-deploy:local .
+        run: docker build --build-arg PORT=${{ env.PORT }} -t botkit-deploy-${{ env.BOT }}:local .
 
       - name: transfer image to vps
         run: |
-          docker save botkit-deploy:local | ssh -o StrictHostKeyChecking=no -i /tmp/vps_key ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'docker load'
+          docker save botkit-deploy-${{ env.BOT }}:local | ssh -o StrictHostKeyChecking=no -i /tmp/vps_key ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'docker load'
 
       - name: run on vps
         uses: appleboy/ssh-action@v1.2.0
@@ -39,13 +39,12 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            BOT="botkit-leadgen"
-            PORT=8084
+            BOT="${{ env.BOT }}"
+            PORT=${{ env.PORT }}
             IMAGE=botkit/${BOT}:latest
-            PREV="${IMAGE%latest}prev"
             ENV_FILE=/home/algtro/BOTOGRAD_TECH/${BOT}/.env
-            docker tag botkit-deploy:local "$IMAGE"
-            docker tag "$IMAGE" "$PREV" 2>/dev/null || true
+            OLD_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$BOT" 2>/dev/null || true)
+            docker tag botkit-deploy-${BOT}:local "$IMAGE"
             docker rm -f "$BOT" || true
             mkdir -p /opt/botkit/data/${BOT}
             docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$IMAGE"
@@ -56,7 +55,9 @@ jobs:
             done
             if [ "$ok" -eq 0 ]; then
               docker rm -f "$BOT" || true
-              docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$PREV"
-              echo "HEALTH FAILED - rolled back"; exit 1
+              if [ -n "$OLD_IMAGE" ]; then
+                docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$OLD_IMAGE"
+              fi
+              echo "HEALTH FAILED - rolled back to $OLD_IMAGE"; exit 1
             fi
             echo "Deploy of $BOT OK"
