@@ -11,25 +11,25 @@ from src.core.nav import admin_menu, main_menu
 from src.leadgen import service
 
 
-def create_admin_router(state: AppState) -> Router:
+def create_admin_router(app_state: AppState) -> Router:
     router = Router()
-    db = state.db
+    db = app_state.db
 
     def is_admin(user_id: int) -> bool:
-        return user_id in (state.config.admin_ids or [])
+        return user_id in (app_state.config.admin_ids or [])
 
     @router.message(Command("admin"))
-    async def cmd_admin(message: Message, state_fsm: FSMContext) -> None:
-        await state_fsm.set_state(AdminAuth.waiting_password)
+    async def cmd_admin(message: Message, state: FSMContext) -> None:
+        await state.set_state(AdminAuth.waiting_password)
         await message.answer("🔑 Введите пароль:")
 
     @router.message(AdminAuth.waiting_password)
-    async def check_password(message: Message, state_fsm: FSMContext) -> None:
-        if message.text == state.config.admin_password:
-            await state_fsm.clear()
+    async def check_password(message: Message, state: FSMContext) -> None:
+        if message.text == app_state.config.admin_password:
+            await state.clear()
             await message.answer("✅ Добро пожаловать!", reply_markup=admin_menu())
         else:
-            await state_fsm.clear()
+            await state.clear()
             await message.answer("❌ Неверный пароль.", reply_markup=main_menu())
 
     @router.message(F.text == "👥 Менеджеры")
