@@ -29,7 +29,9 @@ jobs:
 
             PREV_SHA=$(git rev-parse --short HEAD)
 
-            git fetch --tags && git checkout "$(git describe --tags --abbrev=0)"
+            git fetch --tags
+            LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
+            git checkout "$LATEST_TAG"
 
             if ! docker compose build; then
               echo "Build failed. Rolling back to ${PREV_SHA}"
