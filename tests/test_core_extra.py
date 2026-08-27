@@ -2,17 +2,22 @@ from __future__ import annotations
 
 import asyncio
 import time
-from datetime import datetime
 from contextlib import suppress
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
-from aiogram import Bot, Dispatcher
+from aiogram import Bot
 from aiogram.fsm.storage.memory import MemoryStorage
-from aiogram.types import CallbackQuery, Chat, Message, Update, User
+from aiogram.types import Chat, Message, Update, User
 
+from src.admin.handlers import create_admin_router
+from src.app import register_routers
 from src.core import config as config_mod
+from src.core import storage as storage_mod
+from src.core import throttling
+from src.core.auth import AuthMiddleware
 from src.core.bot_factory import AppState, create_app
 from src.core.errors import (
     RetryMiddleware,
@@ -21,26 +26,19 @@ from src.core.errors import (
 )
 from src.core.fsm import AdminAuth, LeadForm
 from src.core.metrics import (
-    Metrics,
     UPDATES_TOTAL,
+    Metrics,
     UpdatesMiddleware,
     create_metrics_app,
-    health,
-    metrics,
     start_metrics_server,
 )
 from src.core.nav import admin_menu, main_menu, manager_menu
 from src.core.sentry import init_sentry
-from src.core import storage as storage_mod
-from src.core import throttling
+from src.core.ui import escape, lead_card, lead_summary, mask_phone
 from src.core.webhook import create_app as create_webhook_app
-from src.core.auth import AuthMiddleware
-from src.app import register_routers
 from src.escalation import scheduler as esc_scheduler
 from src.leadgen import service as lead_service
 from src.leadgen.handlers import create_leadgen_router
-from src.admin.handlers import create_admin_router
-from src.core.ui import escape, lead_card, lead_summary, mask_phone
 
 
 def _fake_db() -> tuple[MagicMock, MagicMock]:
