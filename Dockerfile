@@ -5,6 +5,7 @@ COPY --chown=botuser:botuser pyproject.toml .
 COPY --chown=botuser:botuser src/ src/
 RUN pip install --no-cache-dir .
 USER 1001:1001
-HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import httpx; httpx.get('http://localhost:8082/health').raise_for_status()"
+ARG PORT
+HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request as u; u.urlopen('http://localhost:${PORT}/health')"
 EXPOSE 8082
 CMD ["python", "-m", "src.bot"]

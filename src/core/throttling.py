@@ -9,9 +9,10 @@ from aiogram.types import Message, TelegramObject
 
 
 class ThrottlingMiddleware(BaseMiddleware):
-    def __init__(self, min_interval: float = 2.0) -> None:
+    def __init__(self, min_interval: float = 2.0, redis_url: str = "") -> None:
         super().__init__()
         self._min_interval = min_interval
+        self._redis_url = redis_url
         self._last_message: dict[int, float] = {}
 
     async def __call__(

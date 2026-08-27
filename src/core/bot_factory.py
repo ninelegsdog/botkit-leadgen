@@ -17,8 +17,8 @@ class AppState:
         self.storage = Storage(self.db)
         self.metrics = Metrics()
         self.bot = Bot(token=config.bot_token, default=DefaultBotProperties(parse_mode="HTML"))
-        self.dp = Dispatcher()
         self.fsm_storage = RedisStorage.from_url(config.redis_url)
+        self.dp = Dispatcher(storage=self.fsm_storage)
 
 
 def create_app(config: Config | None = None) -> AppState:

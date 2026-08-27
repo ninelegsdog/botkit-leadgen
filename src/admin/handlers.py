@@ -16,7 +16,7 @@ def create_admin_router(state: AppState) -> Router:
     db = state.db
 
     def is_admin(user_id: int) -> bool:
-        return user_id == 123456789  # TODO: real admin check
+        return user_id in (state.config.admin_ids or [])
 
     @router.message(Command("admin"))
     async def cmd_admin(message: Message, state_fsm: FSMContext) -> None:
