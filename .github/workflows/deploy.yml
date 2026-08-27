@@ -39,7 +39,7 @@ jobs:
               docker compose build
             fi
 
-            docker compose up -d
+            docker compose down && docker compose up -d
 
             HEALTHY=""
             for i in $(seq 1 12); do
@@ -55,7 +55,7 @@ jobs:
               echo "Health check failed. Rolling back to ${PREV_SHA}"
               git reset --hard "${PREV_SHA}"
               docker compose build
-              docker compose up -d
+              docker compose down && docker compose up -d
               sleep 10
               curl -fs http://127.0.0.1:8082/health || exit 1
             fi
