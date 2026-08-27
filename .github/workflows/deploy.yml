@@ -1,24 +1,17 @@
-name: Deploy to VPS
+name: deploy
 
 on:
   push:
-    tags: ["v*"]
+    tags:
+      - "v*"
   workflow_dispatch:
 
-env:
-  APP_DIR: /home/deploy/botkit-leadgen
-
 jobs:
-  test:
-    uses: ./.github/workflows/ci.yml
-
   deploy:
-    needs: test
     runs-on: ubuntu-latest
-
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1.0.3
+      - name: deploy to vps
+        uses: appleboy/ssh-action@v1.2.0
         with:
           host: ${{ secrets.VPS_HOST }}
           username: ${{ secrets.VPS_USER }}
@@ -26,54 +19,39 @@ jobs:
           command_timeout: 30m
           script: |
             set -e
-            cd /home/deploy/botkit-leadgen
-
-            PREV_SHA=$(git rev-parse --short HEAD)
-
-            git fetch --tags
-            LATEST_TAG=$(git tag --sort=-v:refname | head -n 1)
-            git checkout "$LATEST_TAG"
-
-            if ! docker compose build; then
-              echo "Build failed. Rolling back to ${PREV_SHA}"
-              git reset --hard "${PREV_SHA}"
-              docker compose build
+            BOT="botkit-leadgen"
+            PORT=8084
+            BUILD_DIR=/home/deploy/$BOT
+            ENV_FILE=/home/algtro/BOTOGRAD_TECH/$BOT/.env
+            IMAGE=botkit/$BOT:latest
+            PREV="${IMAGE%latest}prev"
+            # snapshot current production image for rollback
+            docker tag "$IMAGE" "$PREV" 2>/dev/null || true
+            # refresh source from github main
+            if [ -d "$BUILD_DIR/.git" ]; then
+              cd "$BUILD_DIR"
+              git fetch origin
+              git checkout -f origin/main
+              git reset --hard origin/main
+            else
+              git clone --depth 1 -b main "https://github.com/ninelegsdog/$BOT.git" "$BUILD_DIR"
             fi
-
-            docker ps -q --filter "name=$(basename "$APP_DIR")-bot" | xargs -r docker rm -f; docker compose down 2>/dev/null; docker compose up -d
-
-            HEALTHY=""
+            # build new image
+            docker build --build-arg PORT=$PORT -t "$IMAGE" "$BUILD_DIR"
+            # replace running container
+            docker rm -f "$BOT" || true
+            mkdir -p /opt/botkit/data/$BOT
+            docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/$BOT:/data -e PORT=$PORT --env-file "$ENV_FILE" "$IMAGE"
+            # health check
+            ok=0
             for i in $(seq 1 12); do
-              if curl -fs http://127.0.0.1:8082/health >/dev/null; then
-                HEALTHY=1
-                break
-              fi
-              echo "Health check attempt ${i}/12, waiting..."
+              if curl -fs "http://127.0.0.1:${PORT}/health"; then ok=1; break; fi
               sleep 5
             done
-
-            if [ -z "$HEALTHY" ]; then
-              PORT=$(docker compose config 2>/dev/null | grep -oE '127\.0\.0\.1:[0-9]+' | head -n1 | cut -d: -f2)
-              echo "Health check failed. Rolling back to ${PREV_SHA}"
-              echo "===== DIAGNOSIS ====="
-              docker ps -a --filter "name=$(basename "$APP_DIR")"
-              CID=$(docker ps -q --filter "name=$(basename "$APP_DIR")-bot" | head -n1)
-              docker inspect --format 'ExitCode={{.State.ExitCode}} Restarting={{.State.Restarting}} Error={{.State.Error}} Status={{.State.Status}}' "$CID" 2>&1 || true
-              echo "--- bot container logs (tail 60) ---"
-              docker logs --tail 60 "$CID" 2>&1 || true
-              echo "--- curl 127.0.0.1:${PORT}/health ---"
-              curl -fs "http://127.0.0.1:${PORT}/health"; echo " rc=$?"
-              echo "===== END DIAGNOSIS ====="
-              git reset --hard "${PREV_SHA}"
-              docker compose build
-              docker ps -q --filter "name=$(basename "$APP_DIR")-bot" | xargs -r docker rm -f; docker compose down 2>/dev/null; docker compose up -d
-              sleep 10
-              curl -fs http://127.0.0.1:8082/health || exit 1
+            if [ "$ok" -eq 0 ]; then
+              echo "Health check failed. Rolling back to $PREV"
+              docker rm -f "$BOT" || true
+              docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/$BOT:/data -e PORT=$PORT --env-file "$ENV_FILE" "$PREV"
+              exit 1
             fi
-
-            docker compose ps
-            echo "Deployment successful"
-
-      - name: Notify failure
-        if: failure()
-        run: echo "::error::Deployment failed"
+            echo "Deploy of $BOT OK"
