@@ -5,3 +5,11 @@ __pycache__/
 .pytest_cache/
 data/
 .env
+
+# build/test artifacts
+*.egg-info/
+__pycache__/
+*.pyc
+.coverage
+coverage.xml
+.hypothesis/
