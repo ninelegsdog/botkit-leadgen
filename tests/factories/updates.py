@@ -1,5 +1,8 @@
+from __future__ import annotations
+
 from copy import deepcopy
 from time import time
+from typing import Any
 
 
 def message_update(
@@ -8,7 +11,7 @@ def message_update(
     user_id: int = 1001,
     chat_id: int = 1001,
     update_id: int = 1,
-) -> dict:
+) -> dict[str, Any]:
     """Build a valid Telegram `message` Update dict with sane defaults."""
     return {
         "update_id": update_id,
@@ -30,8 +33,8 @@ def callback_update(
     *,
     data: str = "confirm",
     callback_id: str = "cb-1",
-    **kwargs,
-) -> dict:
+    **kwargs: Any,
+) -> dict[str, Any]:
     """Build a valid Telegram `callback_query` Update dict."""
     message = deepcopy(message_update(**kwargs)["message"])
     return {
