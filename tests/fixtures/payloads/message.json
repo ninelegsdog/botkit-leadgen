@@ -1,0 +1,10 @@
+{
+  "update_id": 1,
+  "message": {
+    "message_id": 1,
+    "date": 1700000000,
+    "chat": {"id": 1001, "type": "private"},
+    "from": {"id": 1001, "is_bot": false, "first_name": "E2E Test"},
+    "text": "hello"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "update_id": 1,
+  "callback_query": {
+    "id": "cb-1",
+    "from": {"id": 1001, "is_bot": false, "first_name": "E2E Test"},
+    "message": {
+      "message_id": 1,
+      "date": 1700000000,
+      "chat": {"id": 1001, "type": "private"},
+      "from": {"id": 1001, "is_bot": false, "first_name": "E2E Test"},
+      "text": "hello"
+    },
+    "chat_instance": "test",
+    "data": "confirm"
+  }
+}

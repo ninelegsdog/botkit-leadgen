@@ -66,6 +66,7 @@ def test_yookassa_create_payment_contract(monkeypatch: pytest.MonkeyPatch) -> No
     assert calls["idem"] == "lead:42"
 
 
+@pytest.mark.req
 def test_yookassa_check_payment_contract() -> None:
     from unittest.mock import patch
 

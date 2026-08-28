@@ -24,7 +24,8 @@ dependencies = [
 include = ["src*"]
 
 [project.optional-dependencies]
-dev = ["ruff>=0.8", "mypy>=1.13", "pytest>=8", "pytest-cov>=6", "pytest-asyncio>=0.25"]
+dev = ["ruff>=0.8", "mypy>=1.13", "pytest>=8", "pytest-cov>=6", "pytest-asyncio>=0.25", "pytest-xdist>=3.6", "aiohttp>=3.9", "requests>=2.31"]
+e2e = ["telethon>=1.34", "python-dotenv>=1.0"]
 
 [tool.ruff]
 line-length = 120
@@ -41,6 +42,30 @@ plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
-addopts = "--strict-markers -q --tb=short"
 testpaths = ["tests"]
-markers = ["slow: marks tests as slow"]
+addopts = "-ra --strict-markers --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=69"
+markers = [
+    "no_req: fully offline, no external HTTP/Telegram requests",
+    "req: requires network and/or a real external service (Telegram E2E, payment gateways)",
+    "unit: isolated unit test",
+    "integration: local component/integration test",
+    "webhook: HTTP/webhook endpoint test",
+    "e2e: real Telegram E2E via MTProto",
+    "serial: must not run in parallel via xdist",
+    "slow: marks tests as slow",
+]
+
+[tool.coverage.run]
+branch = true
+source = ["src"]
+parallel = true
+omit = ["tests/*", "scripts/*"]
+
+[tool.coverage.report]
+show_missing = true
+skip_covered = true
+fail_under = 69
+exclude_also = ["if TYPE_CHECKING:", "if __name__ == .__main__.:"]
+
+[tool.coverage.xml]
+output = "coverage.xml"
