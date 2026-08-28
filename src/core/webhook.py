@@ -1,13 +1,19 @@
 from __future__ import annotations
 
 from aiohttp import web
+from sqlalchemy import text
 
 from src.core.bot_factory import AppState
 
 
 async def health_handler(request: web.Request) -> web.Response:
-    state: AppState = request.app["state"]
-    return web.json_response({"status": "ok", "uptime": state.metrics.uptime_seconds()})
+    try:
+        state: AppState = request.app["state"]
+        async with state.db.session() as session:
+            await session.execute(text("SELECT 1"))
+        return web.Response(status=200, text="ok")
+    except Exception:
+        return web.Response(status=500, text="db unavailable")
 
 
 async def metrics_handler(request: web.Request) -> web.Response:

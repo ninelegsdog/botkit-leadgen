@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from dataclasses import dataclass, field
 
@@ -21,7 +22,15 @@ class Config:
     @classmethod
     def from_env(cls) -> Config:
         admin_ids_str = os.getenv("ADMIN_IDS", "")
-        admin_ids = [int(x.strip()) for x in admin_ids_str.split(",") if x.strip()]
+        admin_ids: list[int] = []
+        for token in admin_ids_str.split(","):
+            token = token.strip()
+            if not token:
+                continue
+            try:
+                admin_ids.append(int(token))
+            except ValueError:
+                logging.warning("Invalid admin id ignored: %r", token)
         return cls(
             bot_token=os.getenv("BOT_TOKEN", ""),
             admin_password=os.getenv("ADMIN_PASSWORD", ""),
