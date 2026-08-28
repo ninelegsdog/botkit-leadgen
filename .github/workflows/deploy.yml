@@ -60,7 +60,7 @@ jobs:
             TAG="${{ github.ref_name }}"
             TAG="${TAG#v}"
             [ -z "$TAG" ] && TAG="${{ github.sha }}"
-            IMAGE=botkit/${BOT}:${TAG}
+            IMAGE=botkit-${BOT}:${TAG}
             ENV_FILE=/home/algtro/BOTOGRAD_TECH/${BOT}/.env
             OLD_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$BOT" 2>/dev/null || true)
             docker tag botkit-deploy-${BOT}:local "$IMAGE"
