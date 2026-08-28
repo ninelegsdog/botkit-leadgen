@@ -57,7 +57,10 @@ jobs:
             set -e
             BOT="${{ env.BOT }}"
             PORT=${{ env.PORT }}
-            IMAGE=botkit/${BOT}:latest
+            TAG="${{ github.ref_name }}"
+            TAG="${TAG#v}"
+            [ -z "$TAG" ] && TAG="${{ github.sha }}"
+            IMAGE=botkit/${BOT}:${TAG}
             ENV_FILE=/home/algtro/BOTOGRAD_TECH/${BOT}/.env
             OLD_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$BOT" 2>/dev/null || true)
             docker tag botkit-deploy-${BOT}:local "$IMAGE"
