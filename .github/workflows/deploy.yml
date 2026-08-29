@@ -49,11 +49,11 @@ jobs:
           ssh-keyscan -H 2.27.204.95 >> ~/.ssh/known_hosts
 
       - name: Transfer image to prod
-        run: scp -o StrictHostKeyChecking=no /tmp/${BOT}.tar.gz root@2.27.204.95:/tmp/${BOT}.tar.gz
+        run: scp -o StrictHostKeyChecking=no /tmp/${BOT}.tar.gz deploy@2.27.204.95:/tmp/${BOT}.tar.gz
 
       - name: Load image + prepare dirs on prod
         run: |
-          ssh root@2.27.204.95 "
+          ssh deploy@2.27.204.95 "
             docker load < /tmp/${BOT}.tar.gz && rm -f /tmp/${BOT}.tar.gz
             mkdir -p /home/deploy/${BOT}/data && chmod 777 /home/deploy/${BOT}/data
             mkdir -p /home/deploy/${BOT}/backups
@@ -62,7 +62,7 @@ jobs:
       - name: Render compose from template
         run: |
           sed -e "s/__BOT__/${BOT}/g" -e "s/__VERSION__/${VERSION}/g" -e "s/__PORT__/${PORT}/g" deploy/compose.template.yml > /tmp/compose.yml
-          scp -o StrictHostKeyChecking=no /tmp/compose.yml root@2.27.204.95:/home/deploy/${BOT}/compose.yml
+          scp -o StrictHostKeyChecking=no /tmp/compose.yml deploy@2.27.204.95:/home/deploy/${BOT}/compose.yml
 
       - name: Render .env from secrets
         run: |
@@ -73,16 +73,17 @@ jobs:
           WEBHOOK_SECRET_TOKEN=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
           ADMIN_IDS=${{ secrets.ADMIN_IDS }}
-          REDIS_URL=redis://redis:6379/0
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
           DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
           DB_PATH=./data/bot.db
           EOF
-          scp -o StrictHostKeyChecking=no /tmp/${BOT}.env root@2.27.204.95:/home/deploy/${BOT}/.env
+          scp -o StrictHostKeyChecking=no /tmp/${BOT}.env deploy@2.27.204.95:/home/deploy/${BOT}/.env
 
       - name: Deploy
-        run: ssh root@2.27.204.95 "cd /home/deploy/${BOT} && docker compose up -d"
+        run: ssh deploy@2.27.204.95 "cd /home/deploy/${BOT} && docker compose up -d"
 
       - name: Healthcheck
         run: |
           sleep 15
-          ssh root@2.27.204.95 "curl -f http://localhost:${PORT}/health"
+          ssh deploy@2.27.204.95 "curl -f http://localhost:${PORT}/health"
