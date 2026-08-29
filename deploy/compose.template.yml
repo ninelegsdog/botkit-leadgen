@@ -2,6 +2,7 @@ services:
   bot:
     image: __BOT__:__VERSION__
     container_name: __BOT__
+    user: "1001:1001"
     cap_drop:
       - ALL
     security_opt:
