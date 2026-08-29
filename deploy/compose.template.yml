@@ -23,7 +23,7 @@ services:
       - ./data:/app/data
       - ./backups:/app/backups
     ports:
-      - "__PORT__:__PORT__"
+      - "127.0.0.1:__PORT__:__PORT__"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:__PORT__/health"]
       interval: 30s
