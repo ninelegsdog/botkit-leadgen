@@ -76,7 +76,7 @@ def _make_state() -> AppState:
 
 # --- config ---
 def test_config_from_env(monkeypatch) -> None:
-    monkeypatch.setenv("BOT_TOKEN", "x")
+    monkeypatch.setenv("TELEGRAM_BOT_TOKEN", "x")
     monkeypatch.setenv("ADMIN_PASSWORD", "p")
     monkeypatch.setenv("ADMIN_IDS", "1,2")
     monkeypatch.setenv("REDIS_URL", "redis://r")
