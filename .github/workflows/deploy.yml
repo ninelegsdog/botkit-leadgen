@@ -1,87 +1,88 @@
-name: deploy
+name: ci-cd
 
 on:
   push:
-    tags:
-      - "v*"
+    branches: [main]
   workflow_dispatch:
 
-permissions:
-  contents: read
-  actions: read
+concurrency:
+  group: ci-cd-${{ github.repository }}
+  cancel-in-progress: false
+
+env:
+  BOT: ${{ github.event.repository.name }}
+  PORT: ${{ vars.PORT }}
+  VERSION: ${{ vars.VERSION }}
 
 jobs:
-  deploy:
+  test:
     runs-on: ubuntu-latest
-    env:
-      PORT: 8084
-      BOT: botkit-leadgen
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Install
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e ".[test]" || pip install pytest pytest-cov
+      - name: Test
+        run: pytest -q
+
+  deploy:
+    needs: test
+    runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: require green CI
-        env:
-          GH_TOKEN: ${{ github.token }}
+      - name: Build image
+        run: docker build -t ${BOT}:${VERSION} .
+
+      - name: Save image
+        run: docker save ${BOT}:${VERSION} | gzip > /tmp/${BOT}.tar.gz
+
+      - name: Setup SSH to prod
         run: |
-          for i in $(seq 1 30); do
-            concl=$(gh run list --repo "$GITHUB_REPOSITORY" --commit "$GITHUB_SHA" \
-              --workflow ci.yml --limit 1 --json conclusion --jq '.[0].conclusion' 2>/dev/null || true)
-            if [ "$concl" = "success" ]; then echo "CI green for $GITHUB_SHA"; exit 0; fi
-            if [ "$concl" = "failure" ] || [ "$concl" = "cancelled" ] || [ "$concl" = "timed_out" ]; then
-              echo "CI is RED ($concl) for $GITHUB_SHA - abort deploy"; exit 1
-            fi
-            echo "CI status='${concl:-none}' yet, waiting..."; sleep 15
-          done
-          echo "CI status unknown for $GITHUB_SHA after timeout - abort deploy"; exit 1
+          mkdir -p ~/.ssh
+          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_ed25519
+          chmod 600 ~/.ssh/id_ed25519
+          ssh-keyscan -H 2.27.204.95 >> ~/.ssh/known_hosts
 
-      - name: setup ssh key
+      - name: Transfer image to prod
+        run: scp -o StrictHostKeyChecking=no /tmp/${BOT}.tar.gz root@2.27.204.95:/tmp/${BOT}.tar.gz
+
+      - name: Load image + prepare dirs on prod
         run: |
-          printf '%s\n' "${{ secrets.VPS_SSH_KEY }}" > /tmp/vps_key
-          chmod 600 /tmp/vps_key
+          ssh root@2.27.204.95 "
+            docker load < /tmp/${BOT}.tar.gz && rm -f /tmp/${BOT}.tar.gz
+            mkdir -p /home/deploy/${BOT}/data && chmod 777 /home/deploy/${BOT}/data
+            mkdir -p /home/deploy/${BOT}/backups
+          "
 
-      - name: build image
-        run: docker build --build-arg PORT=${{ env.PORT }} -t botkit-deploy-${{ env.BOT }}:local .
-
-      - name: transfer image to vps
+      - name: Render compose from template
         run: |
-          docker save botkit-deploy-${{ env.BOT }}:local | ssh -o StrictHostKeyChecking=no -i /tmp/vps_key ${{ secrets.VPS_USER }}@${{ secrets.VPS_HOST }} 'docker load'
+          sed -e "s/__BOT__/${BOT}/g" -e "s/__VERSION__/${VERSION}/g" -e "s/__PORT__/${PORT}/g" deploy/compose.template.yml > /tmp/compose.yml
+          scp -o StrictHostKeyChecking=no /tmp/compose.yml root@2.27.204.95:/home/deploy/${BOT}/compose.yml
 
-      - name: run on vps
-        uses: appleboy/ssh-action@v1.2.0
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.VPS_USER }}
-          key: ${{ secrets.VPS_SSH_KEY }}
-          command_timeout: 30m
-          script: |
-            set -e
-            BOT="${{ env.BOT }}"
-            PORT=${{ env.PORT }}
-            TAG="${{ github.ref_name }}"
-            TAG="${TAG#v}"
-            [ -z "$TAG" ] && TAG="${{ github.sha }}"
-            IMAGE=botkit-${BOT}:${TAG}
-            ENV_FILE=/home/algtro/BOTOGRAD_TECH/${BOT}/.env
-            OLD_IMAGE=$(docker inspect --format '{{.Config.Image}}' "$BOT" 2>/dev/null || true)
-            docker tag botkit-deploy-${BOT}:local "$IMAGE"
-            docker rm -f "$BOT" || true
-            mkdir -p /opt/botkit/data/${BOT}
-            docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$IMAGE"
-            ok=0
-            for i in $(seq 1 12); do
-              if curl -fs "http://127.0.0.1:${PORT}/health"; then ok=1; break; fi
-              sleep 5
-            done
-            if [ "$ok" -eq 0 ]; then
-              docker rm -f "$BOT" || true
-              if [ -n "$OLD_IMAGE" ]; then
-                docker run -d --name "$BOT" --network botnet --restart unless-stopped --user 1001:1001 --read-only --cap-drop ALL --security-opt no-new-privileges:true -p "${PORT}:${PORT}" -v /opt/botkit/data/${BOT}:/data -e PORT=$PORT --env-file "$ENV_FILE" "$OLD_IMAGE"
-              fi
-              echo "HEALTH FAILED - rolled back to $OLD_IMAGE"; exit 1
-            fi
-            DEPLOYED_ID=$(docker inspect --format '{{.Id}}' "$IMAGE")
-            RUN_ID=$(docker inspect --format '{{.Image}}' "$BOT")
-            if [ "$DEPLOYED_ID" != "$RUN_ID" ]; then
-              echo "DIGEST MISMATCH: container runs $RUN_ID but deployed $DEPLOYED_ID"; exit 1
-            fi
-            echo "Deploy of $BOT OK (image $DEPLOYED_ID)"
+      - name: Render .env from secrets
+        run: |
+          cat > /tmp/${BOT}.env <<EOF
+          METRICS_PORT=${PORT}
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          WEBHOOK_SECRET_TOKEN=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_IDS=${{ secrets.ADMIN_IDS }}
+          REDIS_URL=redis://redis:6379/0
+          DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
+          DB_PATH=./data/bot.db
+          EOF
+          scp -o StrictHostKeyChecking=no /tmp/${BOT}.env root@2.27.204.95:/home/deploy/${BOT}/.env
+
+      - name: Deploy
+        run: ssh root@2.27.204.95 "cd /home/deploy/${BOT} && docker compose up -d"
+
+      - name: Healthcheck
+        run: |
+          sleep 15
+          ssh root@2.27.204.95 "curl -f http://localhost:${PORT}/health"

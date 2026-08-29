@@ -1,0 +1,45 @@
+services:
+  bot:
+    image: __BOT__:__VERSION__
+    container_name: __BOT__
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    tmpfs:
+      - /tmp
+    environment:
+      - METRICS_PORT=__PORT__
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
+      - WEBHOOK_SECRET_TOKEN=${TELEGRAM_WEBHOOK_SECRET}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD}
+      - ADMIN_IDS=${ADMIN_IDS}
+      - REDIS_URL=redis://redis:6379/0
+      - DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
+      - DB_PATH=./data/bot.db
+    volumes:
+      - ./data:/app/data
+      - ./backups:/app/backups
+    ports:
+      - "__PORT__:__PORT__"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:__PORT__/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    container_name: __BOT__-redis
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - redis-data:/data
+    restart: unless-stopped
+
+volumes:
+  redis-data:
