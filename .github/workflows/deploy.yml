@@ -61,7 +61,7 @@ jobs:
 
       - name: Render compose from template
         run: |
-          sed -e "s/__BOT__/${BOT}/g" -e "s/__VERSION__/${VERSION}/g" -e "s/__PORT__/${PORT}/g" deploy/compose.template.yml > /tmp/compose.yml
+          sed -e "s/__BOT__/${BOT}/g" -e "s/__VERSION__/${VERSION}/g" -e "s/__PORT__/${PORT}/g" -e "s/__REDIS_PASSWORD__/${{ secrets.REDIS_PASSWORD }}/g" deploy/compose.template.yml > /tmp/compose.yml
           scp -o StrictHostKeyChecking=no /tmp/compose.yml deploy@2.27.204.95:/home/deploy/${BOT}/compose.yml
 
       - name: Render .env from secrets
@@ -74,14 +74,14 @@ jobs:
           ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
           ADMIN_IDS=${{ secrets.ADMIN_IDS }}
           REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+          REDIS_URL=redis://:${{ secrets.REDIS_PASSWORD }}@redis:6379/0
           DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
           DB_PATH=./data/bot.db
           EOF
           scp -o StrictHostKeyChecking=no /tmp/${BOT}.env deploy@2.27.204.95:/home/deploy/${BOT}/.env
 
       - name: Deploy
-        run: ssh deploy@2.27.204.95 "cd /home/deploy/${BOT} && docker compose up -d"
+        run:           ssh deploy@2.27.204.95 "cd /home/deploy/${BOT} && chmod 600 .env compose.yml && docker compose up -d"
 
       - name: Healthcheck
         run: |

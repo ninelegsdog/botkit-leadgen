@@ -16,7 +16,7 @@ services:
       - WEBHOOK_SECRET_TOKEN=${TELEGRAM_WEBHOOK_SECRET}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_IDS=${ADMIN_IDS}
-      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379/0
+      - REDIS_URL=redis://:__REDIS_PASSWORD__@redis:6379/0
       - DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
       - DB_PATH=./data/bot.db
     volumes:
@@ -39,7 +39,7 @@ services:
       - ALL
     security_opt:
       - no-new-privileges:true
-    command: ["redis-server", "--requirepass", "${REDIS_PASSWORD}"]
+    command: ["redis-server", "--requirepass", "__REDIS_PASSWORD__"]
     volumes:
       - redis-data:/data
     restart: unless-stopped
