@@ -14,6 +14,7 @@ class Config:
     db_path: str = "data/leads.db"
     webhook_url: str = ""
     webhook_secret: str = ""
+    webhook_cert_path: str = ""
     log_level: str = "INFO"
     sentry_dsn: str = ""
     metrics_port: int = 8082
@@ -39,6 +40,7 @@ class Config:
             db_path=os.getenv("DB_PATH", "data/leads.db"),
             webhook_url=os.getenv("WEBHOOK_URL", ""),
             webhook_secret=os.getenv("WEBHOOK_SECRET", ""),
+            webhook_cert_path=os.getenv("WEBHOOK_CERT_PATH", ""),
             log_level=os.getenv("LOG_LEVEL", "INFO"),
             sentry_dsn=os.getenv("SENTRY_DSN", ""),
             metrics_port=int(os.getenv("METRICS_PORT", "8082")),
