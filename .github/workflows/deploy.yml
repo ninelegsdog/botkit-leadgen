@@ -56,7 +56,6 @@ jobs:
           ssh deploy@2.27.204.95 "
             docker load < /tmp/${BOT}.tar.gz && rm -f /tmp/${BOT}.tar.gz
             mkdir -p /home/deploy/${BOT}/data /home/deploy/${BOT}/backups
-            chmod -R a+rwX /home/deploy/${BOT}/data /home/deploy/${BOT}/backups
           "
 
       - name: Render compose from template
