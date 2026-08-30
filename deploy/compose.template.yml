@@ -25,7 +25,7 @@ services:
     ports:
       - "127.0.0.1:__PORT__:__PORT__"
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:__PORT__/health"]
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:__PORT__/health')"]
       interval: 30s
       timeout: 5s
       retries: 3
