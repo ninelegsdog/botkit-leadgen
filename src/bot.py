@@ -13,7 +13,7 @@ from src.app import register_routers
 from src.core.auth import AuthMiddleware
 from src.core.bot_factory import create_app
 from src.core.errors import RetryMiddleware, register_error_handler
-from src.core.metrics import UpdatesMiddleware, health_handler, metrics_handler, start_metrics_server
+from src.core.metrics import UpdatesMiddleware, health, metrics, start_metrics_server
 from src.core.migrations import migrate
 from src.core.sentry import init_sentry
 from src.core.tgwebhook import build_webhook_app
@@ -31,8 +31,8 @@ def _load_cert(path: str) -> BufferedInputFile | None:
 async def _run_webhook(state: Any, shutdown_event: asyncio.Event) -> None:
     app = build_webhook_app(state.dp, state.bot, state.config.webhook_secret)
     app["state"] = state
-    app.router.add_get("/health", health_handler)
-    app.router.add_get("/metrics", metrics_handler)
+    app.router.add_get("/health", health)
+    app.router.add_get("/metrics", metrics)
     runner = web.AppRunner(app)
     await runner.setup()
     site = web.TCPSite(runner, "0.0.0.0", state.config.metrics_port)
