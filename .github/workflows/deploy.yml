@@ -55,7 +55,8 @@ jobs:
         run: |
           ssh deploy@2.27.204.95 "
             docker load < /tmp/${BOT}.tar.gz && rm -f /tmp/${BOT}.tar.gz
-            mkdir -p /home/deploy/${BOT}/data /home/deploy/${BOT}/backups
+            mkdir -p /home/deploy/${BOT}/data
+            ssh root@2.27.204.95 -i ~/.ssh/id_ed25519_rootproxy "chown -R 1001:1001 /home/deploy/${BOT}/data /home/deploy/${BOT}/backups && chmod -R u+rwX,g-rwx,o-rwx /home/deploy/${BOT}/data /home/deploy/${BOT}/backups"
           "
 
       - name: Render compose from template
