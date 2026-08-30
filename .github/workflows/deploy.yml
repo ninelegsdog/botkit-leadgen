@@ -71,15 +71,15 @@ jobs:
         run: |
           cat > /tmp/${BOT}.env <<EOF
           METRICS_PORT=${PORT}
-          TELEGRAM_BOT_TOKEN=${ secrets.TELEGRAM_BOT_TOKEN }
-          TELEGRAM_WEBHOOK_SECRET=${ secrets.TELEGRAM_WEBHOOK_SECRET }
-          WEBHOOK_SECRET_TOKEN=${ secrets.TELEGRAM_WEBHOOK_SECRET }
-          WEBHOOK_SECRET=${ secrets.TELEGRAM_WEBHOOK_SECRET }
+          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          WEBHOOK_SECRET_TOKEN=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
+          WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
           WEBHOOK_URL=https://ninelegsbots.duckdns.org/webhook/leadgen
-          ADMIN_PASSWORD=${ secrets.ADMIN_PASSWORD }
-          ADMIN_IDS=${ secrets.ADMIN_IDS }
-          REDIS_PASSWORD=${ secrets.REDIS_PASSWORD }
-          REDIS_URL=redis://:${ secrets.REDIS_PASSWORD }@redis:6379/0
+          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
+          ADMIN_IDS=${{ secrets.ADMIN_IDS }}
+          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
+          REDIS_URL=redis://:${{ secrets.REDIS_PASSWORD }}@redis:6379/0
           DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
           DB_PATH=./data/bot.db
           EOF
