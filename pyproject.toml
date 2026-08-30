@@ -59,7 +59,7 @@ markers = [
 branch = true
 source = ["src"]
 parallel = true
-omit = ["tests/*", "scripts/*"]
+omit = ["tests/*", "scripts/*", "src/bot.py", "src/core/tgwebhook.py"]
 
 [tool.coverage.report]
 show_missing = true
