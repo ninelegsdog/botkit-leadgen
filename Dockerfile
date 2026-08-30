@@ -6,6 +6,5 @@ COPY --chown=botuser:botuser src/ src/
 RUN pip install --no-cache-dir .
 USER 1001:1001
 ARG PORT
-HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request as u; u.urlopen('http://localhost:8082/health')"
 EXPOSE 8082
 CMD ["python", "-m", "src.bot"]
