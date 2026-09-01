@@ -5,7 +5,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
-      - uses: actions/setup-python@0b5c6ecbdb5895b57d5622c74b8e653c2f42d69e  # v5.4.0
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
         with:
           python-version: "3.12"
       - run: pip install -e ".[dev]"
@@ -14,7 +14,7 @@ jobs:
       - run: pytest --cov=src --cov-report=term-missing
 
       # Pre-commit checks
-      - uses: actions/setup-python@0b5c6ecbdb5895b57d5622c74b8e653c2f42d69e  # v5.4.0
+      - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
         with:
           python-version: "3.12"
       - name: Install pre-commit
@@ -42,10 +42,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       
       # Gitleaks
-      - uses: gitleaks/gitleaks-action@3b2f6e4c4c1b8c4d5e6f7a8b9c0d1e2f3a4b5c6d  # v2.6.1
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v2.6.1
       
       # Trivy filesystem scan
-      - uses: aquasecurity/trivy-action@1f3e9c1e8a4a8f3b8e7c9d0a1b2c3d4e5f6a7b8c9  # v0.28.0
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.28.0
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -54,19 +54,24 @@ jobs:
           severity: "CRITICAL,HIGH"
           exit-code: "1"
       - name: Upload Trivy FS results
-        uses: github/codeql-action/upload-sarif@44c1b5c7d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0  # v3.28.0
+        uses: github/codeql-action/upload-sarif@8c78abb9b62512e3c45dea6559ffd924ed8549c8  # v3.28.0
         if: always()
+        continue-on-error: true
         with:
           sarif_file: "trivy-fs.sarif"
       
       # SBOM generation
       - name: Generate SBOM
-        uses: anchore/sbom-action@0e8c7e5a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6e  # v0.17.0
+        uses: anchore/sbom-action@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5  # v0.17.0
         with:
           path: "."
           format: "spdx-json"
           output-file: "sbom.spdx.json"
-      - name: Upload SBOM
-        uses: github/dependency-graph-action@v1
+      - name: Publish SBOM to Dependency Graph
+
+        uses: anchore/sbom-action/publish-sbom@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5  # v0.17.0
+
         with:
+
+          sbom-artifact-match: \"sbom.spdx.json\"
           path: "sbom.spdx.json"
