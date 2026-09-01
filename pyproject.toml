@@ -43,7 +43,7 @@ plugins = ["pydantic.mypy"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-ra --strict-markers --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=69"
+addopts = "-ra --strict-markers --cov=src --cov-branch --cov-report=term-missing --cov-fail-under=70"
 markers = [
     "no_req: fully offline, no external HTTP/Telegram requests",
     "req: requires network and/or a real external service (Telegram E2E, payment gateways)",

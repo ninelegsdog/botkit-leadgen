@@ -18,8 +18,8 @@ jobs:
   test:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
+      - uses: actions/setup-python@0b5c6ecbdb5895b57d5622c74b8e653c2f42d69e  # v5.4.0
         with:
           python-version: "3.13"
       - name: Install
@@ -32,71 +32,37 @@ jobs:
   deploy:
     needs: test
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
 
-      - name: Build image
-        run: docker build -t ${BOT}:${VERSION} .
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f95db51fddba0c2d1ec667646a06c2ce06b01c78  # v3.8.0
 
-      - name: Save image
-        run: docker save ${BOT}:${VERSION} | gzip > /tmp/${BOT}.tar.gz
+      - name: Login to GHCR
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d  # v3.3.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Setup SSH to prod
-        run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.PROD_SSH_KEY }}" > ~/.ssh/id_ed25519
-          chmod 600 ~/.ssh/id_ed25519
-          ssh-keyscan -H 2.27.204.95 >> ~/.ssh/known_hosts
+      - name: Extract metadata
+        id: meta
+        uses: docker/metadata-action@902fa8ec7d6ecbf8d84d538b9b233a880e428804  # v5.6.1
+        with:
+          images: ghcr.io/${{ github.repository }}
+          tags: |
+            type=ref,event=branch
+            type=sha
 
-      - name: Transfer image to prod
-        run: scp -o StrictHostKeyChecking=no /tmp/${BOT}.tar.gz deploy@2.27.204.95:/tmp/${BOT}.tar.gz
-
-      - name: Load image + prepare dirs on prod
-        run: |
-          ssh deploy@2.27.204.95 "
-            docker load < /tmp/${BOT}.tar.gz && rm -f /tmp/${BOT}.tar.gz
-            mkdir -p /home/deploy/${BOT}/data /home/deploy/${BOT}/backups
-          "
-
-      - name: Fix ownership on prod (root via proxyjump)
-        run: |
-          ssh -J deploy@2.27.204.95 -o StrictHostKeyChecking=accept-new root@2.27.204.95 "chown -R 1001:1001 /home/deploy/${BOT}/data /home/deploy/${BOT}/backups && chmod -R u+rwX,g-rwx,o-rwx /home/deploy/${BOT}/data /home/deploy/${BOT}/backups"
-
-      - name: Render compose from template
-        run: |
-          sed -e "s/__BOT__/${BOT}/g" -e "s/__VERSION__/${VERSION}/g" -e "s/__PORT__/${PORT}/g" -e "s/__REDIS_PASSWORD__/${{ secrets.REDIS_PASSWORD }}/g" deploy/compose.template.yml > /tmp/compose.yml
-          scp -o StrictHostKeyChecking=no /tmp/compose.yml deploy@2.27.204.95:/home/deploy/${BOT}/compose.yml
-
-      - name: Render .env from secrets
-        run: |
-          cat > /tmp/${BOT}.env <<EOF
-          METRICS_PORT=${PORT}
-          TELEGRAM_BOT_TOKEN=${{ secrets.TELEGRAM_BOT_TOKEN }}
-          TELEGRAM_WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-          WEBHOOK_SECRET_TOKEN=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-          WEBHOOK_SECRET=${{ secrets.TELEGRAM_WEBHOOK_SECRET }}
-          WEBHOOK_URL=https://ninelegsbots.duckdns.org/webhook/leadgen
-          ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }}
-          ADMIN_IDS=${{ secrets.ADMIN_IDS }}
-          REDIS_PASSWORD=${{ secrets.REDIS_PASSWORD }}
-          REDIS_URL=redis://:${{ secrets.REDIS_PASSWORD }}@redis:6379/0
-          DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
-          DB_PATH=./data/bot.db
-          EOF
-          scp -o StrictHostKeyChecking=no /tmp/${BOT}.env deploy@2.27.204.95:/home/deploy/${BOT}/.env
-
-      - name: Deploy
-        run:           ssh deploy@2.27.204.95 "cd /home/deploy/${BOT} && chmod 600 .env compose.yml && docker compose up -d"
-
-      - name: Healthcheck
-        run: |
-          for i in {1..10}; do
-            sleep 3
-            if ssh deploy@2.27.204.95 "curl -f -s http://localhost:${PORT}/health > /dev/null"; then
-              echo "Healthcheck passed on attempt $i"
-              exit 0
-            fi
-            echo "Healthcheck attempt $i failed, retrying..."
-          done
-          echo "Healthcheck failed after 10 attempts"
-          exit 1
+      - name: Build and push
+        uses: docker/build-push-action@471d1dc4e07e5cded4c446f1e8b6b4b5a9f0c4c1  # v5.3.0
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

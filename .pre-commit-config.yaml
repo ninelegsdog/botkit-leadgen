@@ -1,7 +1,12 @@
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.16.0
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.18.0
     hooks:
-      - id: ruff
-        args: [--fix]
-      - id: ruff-format
+      - id: gitleaks
+        name: Gitleaks
+        entry: gitleaks detect
+        language: system
+        types: [text]
+        exclude: ^.*\.(png|jpg|jpeg|gif|ico|svg|woff|woff2|ttf|eot|pdf|zip|tar|gz|lock|log)$
+        args: ["--no-banner", "--verbose"]
+        stages: [pre-commit, pre-push]
