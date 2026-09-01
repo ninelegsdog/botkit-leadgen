@@ -17,8 +17,13 @@ jobs:
       - uses: actions/setup-python@42375524e23c412d93fb67b49958b491fce71c38  # v5.4.0
         with:
           python-version: "3.12"
-      - name: Install pre-commit
-        run: pip install pre-commit
+      - name: Install pre-commit and gitleaks
+        run: |
+          pip install pre-commit
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz -o /tmp/gitleaks.tgz
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
+          mkdir -p /tmp/bin && mv /tmp/gitleaks /tmp/bin/
+          echo "/tmp/bin" >> "$GITHUB_PATH"
       - name: Run pre-commit
         run: pre-commit run --all-files
 
@@ -42,10 +47,10 @@ jobs:
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683  # v4.2.2
       
       # Gitleaks
-      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v2.6.1
+      - uses: gitleaks/gitleaks-action@e0c47f4f8be36e29cdc102c57e68cb5cbf0e8d1e  # v3.0.0
       
       # Trivy filesystem scan
-      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.28.0
+      - uses: aquasecurity/trivy-action@a9c7b0f06e461e9d4b4d1711f154ee024b8d7ab8  # v0.36.0
         with:
           scan-type: "fs"
           scan-ref: "."
@@ -68,10 +73,6 @@ jobs:
           format: "spdx-json"
           output-file: "sbom.spdx.json"
       - name: Publish SBOM to Dependency Graph
-
         uses: anchore/sbom-action/publish-sbom@d94f46e13c6c62f59525ac9a1e147a99dc0b9bf5  # v0.17.0
-
         with:
-
-          sbom-artifact-match: \"sbom.spdx.json\"
-          path: "sbom.spdx.json"
+          sbom-artifact-match: "sbom.spdx.json"
