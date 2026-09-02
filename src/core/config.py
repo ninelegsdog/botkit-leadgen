@@ -10,7 +10,7 @@ class Config:
     bot_token: str = ""
     admin_password: str = ""
     admin_ids: list[int] = None  # type: ignore[assignment]
-    redis_url: str = "redis://localhost:6379/0"
+    redis_url: str = "redis://127.0.0.1:6380/1"
     db_path: str = "data/leads.db"
     webhook_url: str = ""
     webhook_secret: str = ""
