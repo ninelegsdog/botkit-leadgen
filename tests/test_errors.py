@@ -74,7 +74,7 @@ def test_metrics_endpoint_exposes_counters() -> None:
     UPDATES_TOTAL.labels(type="message").inc()
     app = create_metrics_app()
     assert app.router.routes()  # /health and /metrics registered
-    assert b"bot_updates_total" in generate_latest()
+    assert b"botkit_updates_total" in generate_latest()
 
 
 def test_update_types_importable() -> None:
