@@ -14,7 +14,7 @@ from src.core.auth import AuthMiddleware
 from src.core.bot_factory import create_app
 from src.core.errors import RetryMiddleware, register_error_handler
 from src.core.logging import LoggingMiddleware, setup_logging
-from src.core.metrics import UpdatesMiddleware, health, metrics, start_metrics_server
+from src.core.metrics import UpdatesMiddleware, health, metrics, start_metrics_server, version
 from src.core.migrations import migrate
 from src.core.sentry import init_sentry
 from src.core.tgwebhook import build_webhook_app
@@ -34,6 +34,7 @@ async def _run_webhook(state: Any, shutdown_event: asyncio.Event) -> None:
     app = build_webhook_app(state.dp, state.bot, state.config.webhook_secret)
     app["state"] = state
     app.router.add_get("/health", health)
+    app.router.add_get("/version", version)
     app.router.add_get("/metrics", metrics)
     runner = web.AppRunner(app)
     await runner.setup()
