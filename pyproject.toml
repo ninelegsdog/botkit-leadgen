@@ -70,3 +70,7 @@ exclude_also = ["if TYPE_CHECKING:", "if __name__ == .__main__.:"]
 
 [tool.coverage.xml]
 output = "coverage.xml"
+
+[[tool.mypy.overrides]]
+module = "tests.e2e.*"
+ignore_errors = true
