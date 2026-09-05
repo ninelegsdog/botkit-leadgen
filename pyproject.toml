@@ -18,7 +18,7 @@ dependencies = [
     "httpx>=0.28",
     "pydantic-settings>=2.0",
     "structlog>=24.0",
-    "botkit-core @ git+https://github.com/ninelegsdog/botkit-core@9b821267686ad737ae07b843082c7c438fc3ea8a",
+    "botkit-core @ git+https://github.com/ninelegsdog/botkit-core@4082d43b6747ff936650c54c43ac69cf64782d0f",
 ]
 
 [tool.setuptools.packages.find]
