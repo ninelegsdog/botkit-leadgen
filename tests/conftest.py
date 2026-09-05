@@ -8,18 +8,17 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from testcontainers.community.postgres import PostgresContainer
+from testcontainers.community.redis import RedisContainer
 
 from src.core.config import Config
 from src.core.database import Database
 from src.core.migrations import migrate
-from testcontainers.community.postgres import PostgresContainer
-from testcontainers.community.redis import RedisContainer
 
 
 @pytest.fixture(scope="session")
 def postgres_container() -> Any:
     """PostgreSQL 16 container for integration tests."""
-    from testcontainers.community.postgres import PostgresContainer
     container = PostgresContainer("postgres:16-alpine")
     container.start()
     yield container
@@ -29,7 +28,6 @@ def postgres_container() -> Any:
 @pytest.fixture(scope="session")
 def redis_container() -> Any:
     """Redis 7 container for integration tests."""
-    from testcontainers.community.redis import RedisContainer
     container = RedisContainer("redis:7-alpine")
     container.start()
     yield container
@@ -79,7 +77,6 @@ async def redis_client(redis_url: str):
 async def db():
     config = Config(db_path=":memory:")
     database = Database(config)
-    from src.core.migrations import migrate
     await migrate(database)
     yield database
     await database.close()
