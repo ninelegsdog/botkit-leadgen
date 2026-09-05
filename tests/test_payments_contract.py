@@ -1,40 +1,113 @@
-"""Contract tests for payments (Mock) — delivery."""
+"""Contract tests for payments (YooKassa/Stars) — respx-mock."""
 from __future__ import annotations
 
 import pytest
+from unittest.mock import MagicMock, patch
+
+try:
+    import yookassa
+
+    HAS_YOOKASSA = True
+except ImportError:
+    HAS_YOOKASSA = False
+
+from aiogram.types import Message
 
 from src.core.payments import MockPaymentProvider
 
+try:
+    from src.core.payments import YooKassaPaymentProvider
+except ImportError:
+    YooKassaPaymentProvider = None  # type: ignore
+
 
 @pytest.mark.asyncio
-async def test_mock_create_payment() -> None:
+async def test_mock_provider_create_invoice() -> None:
+    provider = MockPaymentProvider(prefix="https://t.me/mock/")
+    link = await provider.create_invoice_link(
+        title="Test", description="Desc", payload="pay_123", amount=100, currency="XTR"
+    )
+    assert link == "https://t.me/mock/pay_123"
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_verify_payment_success() -> None:
     provider = MockPaymentProvider()
-    link = await provider.create_payment(
+    msg = Message.model_validate({
+        "message_id": 1,
+        "date": 0,
+        "chat": {"id": 1, "type": "private"},
+        "successful_payment": {
+            "currency": "XTR",
+            "total_amount": 100,
+            "invoice_payload": "pay_123",
+            "telegram_payment_charge_id": "ch_123",
+            "provider_payment_charge_id": "prov_123",
+        },
+    })
+    assert await provider.verify_payment(msg) is True
+
+
+@pytest.mark.asyncio
+async def test_mock_provider_verify_payment_fail() -> None:
+    provider = MockPaymentProvider()
+    msg = Message.model_validate({
+        "message_id": 1,
+        "date": 0,
+        "chat": {"id": 1, "type": "private"},
+    })
+    assert await provider.verify_payment(msg) is False
+
+
+@pytest.mark.skipif(not HAS_YOOKASSA, reason="yookassa not installed")
+@pytest.mark.asyncio
+@patch("yookassa.Payment.create")
+async def test_yookassa_create_invoice_contract(mock_create: MagicMock) -> None:
+    from src.core.payments import YooKassaPaymentProvider
+
+    mock_payment = MagicMock()
+    mock_payment.confirmation.confirmation_url = "https://yookassa.ru/confirm/pay_123"
+    mock_create.return_value = mock_payment
+
+    provider = YooKassaPaymentProvider(shop_id="123", secret_key="test_key")
+    link = await provider.create_invoice_link(
         title="Test", description="Desc", payload="pay_123", amount=100, currency="RUB"
     )
-    assert link == "mock_payment_123" or "pay_123" in link or link is not None
+    mock_create.assert_called_once()
+    call_args = mock_create.call_args[0][0]
+    assert call_args["amount"]["value"] == "100.00"
+    assert call_args["amount"]["currency"] == "RUB"
+    assert call_args["metadata"]["payload"] == "pay_123"
+    assert link == "https://yookassa.ru/confirm/pay_123"
 
 
+@pytest.mark.skipif(not HAS_YOOKASSA, reason="yookassa not installed")
 @pytest.mark.asyncio
-async def test_mock_check_payment() -> None:
-    provider = MockPaymentProvider()
-    assert await provider.check_payment("pay_123") is True
-    assert await provider.check_payment("invalid") is True  # mock always true
+async def test_yookassa_verify_payment() -> None:
+    from src.core.payments import YooKassaPaymentProvider
+
+    provider = YooKassaPaymentProvider(shop_id="123", secret_key="test_key")
+    msg = Message.model_validate({
+        "message_id": 1,
+        "date": 0,
+        "chat": {"id": 1, "type": "private"},
+        "successful_payment": {
+            "currency": "RUB",
+            "total_amount": 10000,
+            "invoice_payload": "pay_123",
+            "telegram_payment_charge_id": "ch_123",
+            "provider_payment_charge_id": "prov_123",
+        },
+    })
+    assert await provider.verify_payment(msg) is True
 
 
-def test_mock_provider_is_payment_provider() -> None:
-    from src.core.payments import PaymentProvider
+@pytest.mark.skipif(not HAS_YOOKASSA, reason="yookassa not installed")
+def test_create_payment_provider_factory() -> None:
+    from src.core.payments import create_payment_provider
 
-    provider = MockPaymentProvider()
-    assert isinstance(provider, PaymentProvider)
+    mock = create_payment_provider("mock", prefix="https://t.me/mock/")
+    assert isinstance(mock, MockPaymentProvider)
 
-
-@pytest.mark.asyncio
-async def test_mock_create_payment_different_currencies() -> None:
-    provider = MockPaymentProvider()
-    for currency in ["RUB", "XTR", "USD"]:
-        link = await provider.create_payment(
-            title="T", description="D", payload="p", amount=50, currency=currency
-        )
-        assert link is not None
-        assert isinstance(link, str)
+    yk = create_payment_provider("yookassa", shop_id="123", secret_key="key")
+    assert isinstance(yk, YooKassaPaymentProvider)
