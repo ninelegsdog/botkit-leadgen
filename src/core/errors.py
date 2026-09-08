@@ -6,7 +6,7 @@ from collections.abc import Awaitable, Callable
 from typing import Any
 
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
-from aiogram.types import TelegramObject
+from aiogram.types import ErrorEvent, TelegramObject
 
 from src.core.metrics import ERRORS_TOTAL
 
@@ -29,8 +29,8 @@ async def default_error_handler(event: TelegramObject, exception: Exception) -> 
 
 def register_error_handler(dp: Any) -> None:
     @dp.error()  # type: ignore[untyped-decorator]
-    async def _on_error(event: TelegramObject, exception: Exception) -> None:
-        await default_error_handler(event, exception)
+    async def _on_error(event: ErrorEvent) -> None:
+        await default_error_handler(event, event.exception)
 
 
 class RetryMiddleware:
