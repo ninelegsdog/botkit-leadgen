@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from dataclasses import dataclass, field
 from typing import Any
@@ -92,7 +93,7 @@ def create_metrics_app() -> web.Application:
 async def start_metrics_server(port: int) -> web.AppRunner:
     runner = web.AppRunner(create_metrics_app())
     await runner.setup()
-    site = web.TCPSite(runner, "0.0.0.0", port)
+    site = web.TCPSite(runner, os.getenv("BIND_HOST", "0.0.0.0"), port)
     await site.start()
     logger.info("Metrics server started on port %s", port)
     return runner
