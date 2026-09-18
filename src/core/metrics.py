@@ -17,6 +17,7 @@ try:
     from botkit_core import __version__ as _core_version
 except ImportError:
     _core_version = "0.0.0"
+_BUILD_SHA = os.getenv("BUILD_SHA", "unknown")
 
 logger = logging.getLogger(__name__)
 
@@ -70,12 +71,12 @@ class Metrics:
 async def health(request: web.Request) -> web.Response:
     accept = request.headers.get("Accept", "")
     if "application/json" in accept:
-        return web.json_response({"status": "ok", "version": _core_version})
+        return web.json_response({"status": "ok", "version": _core_version, "commit": _BUILD_SHA})
     return web.Response(text="ok")
 
 
 async def version(request: web.Request) -> web.Response:
-    return web.json_response({"version": _core_version, "service": "botkit"})
+    return web.json_response({"version": _core_version, "service": "botkit", "commit": _BUILD_SHA})
 
 
 async def metrics(request: web.Request) -> web.Response:

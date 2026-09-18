@@ -16,5 +16,7 @@ RUN --mount=type=secret,id=BOTKIT_CORE_TOKEN bash <<'EOF'
 EOF
 USER 1001:1001
 ARG PORT
+ARG BUILD_SHA
+ENV BUILD_SHA=$BUILD_SHA
 EXPOSE 8082
 CMD ["python", "-m", "src.bot"]
