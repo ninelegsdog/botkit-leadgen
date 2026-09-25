@@ -1,4 +1,3 @@
-#!/usr/bin/env python3
 """validate_compose.py — структурная валидация deploy/compose.yml ботов botkit.
 
 Ловит класс багов D2-fix (2026-09-25):/duplicate mapping keys, которых docker
@@ -142,7 +141,7 @@ def main() -> int:
         print(fail(f"environment missing keys: {sorted(missing_env)}"))
         return 1
     checks.append(("environment covers required expected keys",
-                   EXPECTED_ENV <= set(env_keys)))
+                   set(env_keys) >= EXPECTED_ENV))
 
     # extra_hosts
     eh = bot_svc.get("extra_hosts")
