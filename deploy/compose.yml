@@ -25,7 +25,6 @@ services:
       - WEBHOOK_SECRET_TOKEN=${TELEGRAM_WEBHOOK_SECRET}
       - WEBHOOK_SECRET=${TELEGRAM_WEBHOOK_SECRET}
       - WEBHOOK_URL=${WEBHOOK_URL}
-      - WEBHOOK_CERT_PATH=/app/certs/fullchain.pem
       - ADMIN_PASSWORD=${ADMIN_PASSWORD}
       - ADMIN_IDS=${ADMIN_IDS}
       - REDIS_URL=${REDIS_URL}
@@ -37,7 +36,6 @@ services:
     volumes:
       - ../data:/app/data
       - ../backups:/app/backups
-      - /home/deploy/reverse-proxy/certs/fullchain.pem:/app/certs/fullchain.pem:ro
     healthcheck:
       test: ["CMD", "python3", "-c", "import urllib.request,socket; urllib.request.urlopen('http://127.0.0.1:${METRICS_PORT}/health',timeout=2); socket.create_connection(('redis',6379),5).close()"]
       interval: 30s
