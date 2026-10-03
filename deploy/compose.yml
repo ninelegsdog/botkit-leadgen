@@ -2,7 +2,7 @@ name: botkit-leadgen
 
 services:
   bot:
-    image: ghcr.io/ninelegsdog/botkit-leadgen:${IMAGE_TAG:-main}
+    image: "ghcr.io/ninelegsdog/botkit-leadgen:${IMAGE_TAG:?IMAGE_TAG is not set - deploy through botkit-monitoring ops/rollout/deploy_rollout.sh}"
     container_name: botkit-leadgen
     user: "1001:1001"
     cap_drop:
