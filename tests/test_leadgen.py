@@ -75,3 +75,36 @@ async def test_find_lead_by_phone(db):
 async def test_add_feedback(db):
     lead_id = await service.create_lead(db, client_user_id=123)
     await service.add_feedback(db, lead_id, 5, "Great service!")
+
+
+@pytest.mark.asyncio
+async def test_create_leadgen_router_start_clears_fsm_state() -> None:
+    """Пользователь был посреди сценария: /start обязан сбросить состояние."""
+    from types import SimpleNamespace
+    from unittest.mock import AsyncMock, MagicMock
+
+    from aiogram.fsm.context import FSMContext
+    from aiogram.fsm.storage.base import StorageKey
+    from aiogram.fsm.storage.memory import MemoryStorage
+    from aiogram.types import User
+
+    from src.core.fsm import LeadForm
+    from src.leadgen.handlers import create_leadgen_router
+
+    router = create_leadgen_router(SimpleNamespace(db=MagicMock()))
+    handler = next(
+        (h.callback for h in router.message.handlers if getattr(h.callback, "__name__", None) == "cmd_start"),
+        None,
+    )
+    assert handler is not None, "обработчик cmd_start не найден"
+
+    fsm_ctx = FSMContext(MemoryStorage(), StorageKey(bot_id=0, chat_id=1, user_id=1))
+    await fsm_ctx.set_state(LeadForm.choosing_service)
+    assert await fsm_ctx.get_state() is not None
+
+    msg = MagicMock()
+    msg.answer = AsyncMock()
+    msg.from_user = User(id=1, is_bot=False, first_name="Test")
+    await handler(msg, fsm_ctx)
+
+    assert await fsm_ctx.get_state() is None
