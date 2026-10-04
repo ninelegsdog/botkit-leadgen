@@ -135,6 +135,22 @@ def main() -> int:
     checks.append(("tmpfs contains /tmp",
                    isinstance(tmpfs, list) and "/tmp" in tmpfs))
 
+    # The image tag must be a required variable, never a default. `image: repo:${IMAGE_TAG:-main}`
+    # was the shape every bot carried for months, and because nobody ever wrote IMAGE_TAG, a manual
+    # `docker compose up -d` silently resolved the default and deployed `:main` - a moving tag with
+    # no health gate and no record. The rollout writes IMAGE_TAG into the bot's env file, which is
+    # what compose reads through --env-file; the `:?` form is what turns a forgotten value into an
+    # error instead of a guess. `main` is still reachable, deliberately, by setting IMAGE_TAG=main.
+    #
+    # The third rule is here because of a mistake made while fixing the first: quoting only the
+    # parameter, `image: repo:"${IMAGE_TAG:?msg}"`, is valid YAML that parses into one scalar, so
+    # every other check here passed while docker received a reference with literal quotes in it.
+    # Quoting the whole value is correct and leaves no quotes in the parsed string.
+    image = str(bot_svc.get("image", ""))
+    checks.append(("image names the tag through a required IMAGE_TAG", "${IMAGE_TAG:?" in image))
+    checks.append(("image has no fallback tag for IMAGE_TAG", "${IMAGE_TAG:-" not in image))
+    checks.append(("image value carries no stray quotes", '"' not in image))
+
     # environment: list of KEY=... entries, each unique
     env = bot_svc.get("environment")
     if not isinstance(env, list):
