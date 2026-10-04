@@ -19,7 +19,8 @@ def create_leadgen_router(app_state: AppState) -> Router:
     db = app_state.db
 
     @router.message(Command("start"))
-    async def cmd_start(message: Message) -> None:
+    async def cmd_start(message: Message, state: FSMContext) -> None:
+        await state.clear()
         await message.answer(
             "👋 Здравствуйте! Оставьте заявку, и мы свяжемся с вами.",
             reply_markup=main_menu(),
