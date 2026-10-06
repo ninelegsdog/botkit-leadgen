@@ -19,6 +19,9 @@ env:
   PORT: ${{ vars.PORT }}
   VERSION: ${{ vars.VERSION }}
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
