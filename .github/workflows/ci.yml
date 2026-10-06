@@ -23,7 +23,10 @@ jobs:
       - name: Install pre-commit and gitleaks
         run: |
           pip install pre-commit
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_checksums.txt -o /tmp/gitleaks_checksums.txt
           curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.18.0/gitleaks_8.18.0_linux_x64.tar.gz -o /tmp/gitleaks.tgz
+          expected=$(awk -v f="gitleaks_8.18.0_linux_x64.tar.gz" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' /tmp/gitleaks_checksums.txt)
+          echo "$expected  /tmp/gitleaks.tgz" | sha256sum -c -
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           mkdir -p /tmp/bin && mv /tmp/gitleaks /tmp/bin/
           echo "/tmp/bin" >> "$GITHUB_PATH"
@@ -59,7 +62,11 @@ jobs:
       # пинненной версией CLI, без обращений к API; SARIF уходит в code scanning.
       - name: Gitleaks scan
         run: |
-          curl -sfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz | tar -xz -C /tmp gitleaks
+          curl -sfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_checksums.txt -o /tmp/gitleaks_checksums.txt
+          curl -sfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz -o /tmp/gitleaks.tgz
+          expected=$(awk -v f="gitleaks_8.24.3_linux_x64.tar.gz" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' /tmp/gitleaks_checksums.txt)
+          echo "$expected  /tmp/gitleaks.tgz" | sha256sum -c -
+          tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks detect --source . --redact --no-banner --report-format sarif --report-path gitleaks.sarif
       - name: Upload Gitleaks results
         uses: github/codeql-action/upload-sarif@fddeee1a7ece751b577e409a89057319e3172939  # v4.0.0
@@ -71,7 +78,11 @@ jobs:
       # Trivy filesystem scan
       - name: Trivy filesystem scan
         run: |
-          curl -sfL https://raw.githubusercontent.com/aquasecurity/trivy/main/contrib/install.sh | sh -s -- -b /tmp/trivybin
+          curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_checksums.txt -o /tmp/trivy_checksums.txt
+          curl -sfL https://github.com/aquasecurity/trivy/releases/download/v0.75.0/trivy_0.75.0_Linux-64bit.tar.gz -o /tmp/trivy.tgz
+          expected=$(awk -v f="trivy_0.75.0_Linux-64bit.tar.gz" '{n=$2; sub(/^\*/,"",n); if (n==f) print $1}' /tmp/trivy_checksums.txt)
+          echo "$expected  /tmp/trivy.tgz" | sha256sum -c -
+          mkdir -p /tmp/trivybin && tar -xzf /tmp/trivy.tgz -C /tmp/trivybin trivy
           /tmp/trivybin/trivy fs --severity CRITICAL,HIGH --exit-code 1 --format sarif --output trivy-fs.sarif .
       - name: Upload Trivy FS results
         uses: github/codeql-action/upload-sarif@fddeee1a7ece751b577e409a89057319e3172939  # v4.0.0
@@ -99,6 +110,6 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09  # v5.0.0
       - name: Setup k6
-        uses: grafana/setup-k6-action@v1  # v1
+        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1  # v1  # v1
       - name: Validate k6 script
         run: k6 run --vus 1 --iterations 1 load-test.js --out /dev/null || echo "k6 script valid (no server, expected fail)"
