@@ -42,7 +42,13 @@ services:
       timeout: 5s
       retries: 3
     read_only: true
-    restart: unless-stopped
+    restart: always
+    pids_limit: 256
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
     mem_limit: 1g
 
 networks:
