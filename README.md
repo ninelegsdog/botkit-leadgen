@@ -45,7 +45,8 @@ ADMIN_IDS, ADMIN_PASSWORD, BOT_TOKEN, DB_PATH, ESCALATION_MINUTES, LOG_LEVEL, ME
 pytest
 ```
 
-88 тестов в 20 файлах.
+[![CI](https://github.com/ninelegsdog/botkit-leadgen/actions/workflows/ci.yml/badge.svg)](https://github.com/ninelegsdog/botkit-leadgen/actions/workflows/ci.yml)
+Число тестов не дублируется в README вручную — актуальный прогон смотрите в CI (бейдж выше).
 
 ## Бэкапы
 
