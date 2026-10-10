@@ -49,16 +49,14 @@ pytest
 
 ## Бэкапы
 
-Крон на VPS (ежедневно 04:00, retention 14 дней):
+Бэкапы и восстановление — общий контур на проде (systemd-таймеры, offsite restic,
+один общий Redis на все боты), а не отдельный скрипт внутри репозитория.
+Актуальная процедура и оговорки — в
+[`botkit-monitoring/ops/backup/RESTORE.md`](https://github.com/ninelegsdog/botkit-monitoring/blob/main/ops/backup/RESTORE.md).
 
-```
-0 4 * * * AGE_RECIPIENT=age1... OFFSITE_TARGET=user@backup-host:/srv/backups /usr/local/bin/botkit-backup.sh <BOTNAME>
-```
-
-Восстановление:
-
-```
-botkit-restore.sh <BOTNAME> <db-name>.db ~/.secrets/keys/backup.txt [target-dir]
+```bash
+# проверка бэкапа этого бота (ничего не меняет)
+/root/restore_test.sh botkit-leadgen
 ```
 
 ## Development process
@@ -80,7 +78,7 @@ botkit-restore.sh <BOTNAME> <db-name>.db ~/.secrets/keys/backup.txt [target-dir]
 Implementation code was generated with AI coding agents under human-led engineering control.
 
 Полное описание процесса, шаблон `AGENTS.md` и чек-листы ревью AI-кода и секретов —
-в репозитории [agentic-development-playbook](https://github.com/ninelegsdog).
+в репозитории [agentic-development-playbook](https://github.com/ninelegsdog/agentic-development-playbook).
 
 ## Лицензия
 
