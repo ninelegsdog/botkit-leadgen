@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import hmac
+
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
@@ -25,7 +27,7 @@ def create_admin_router(app_state: AppState) -> Router:
 
     @router.message(AdminAuth.waiting_password)
     async def check_password(message: Message, state: FSMContext) -> None:
-        if message.text == app_state.config.admin_password:
+        if hmac.compare_digest(message.text or "", app_state.config.admin_password):
             await state.clear()
             await message.answer("✅ Добро пожаловать!", reply_markup=admin_menu())
         else:
