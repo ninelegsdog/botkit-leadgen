@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import hmac
-
 from aiogram import F, Router
 from aiogram.filters import Command
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message
 
+from src.core.auth import AdminGate
 from src.core.bot_factory import AppState
 from src.core.fsm import AdminAuth
 from src.core.nav import admin_menu, main_menu
@@ -20,6 +19,15 @@ def create_admin_router(app_state: AppState) -> Router:
     def is_admin(user_id: int) -> bool:
         return user_id in (app_state.config.admin_ids or [])
 
+    # The password check below compared in constant time but had no attempt
+    # limit, so the admin surface allowed unlimited guesses. AdminGate adds the
+    # throttle; is_throttled is checked BEFORE authorize so guesses are refused
+    # for the whole window. is_admin keeps its old meaning: config admins, plus
+    # anyone the gate has authorised.
+    gate = AdminGate(
+        app_state.config.admin_password, app_state.config.admin_ids or []
+    )
+
     @router.message(Command("admin"))
     async def cmd_admin(message: Message, state: FSMContext) -> None:
         await state.set_state(AdminAuth.waiting_password)
@@ -27,7 +35,16 @@ def create_admin_router(app_state: AppState) -> Router:
 
     @router.message(AdminAuth.waiting_password)
     async def check_password(message: Message, state: FSMContext) -> None:
-        if hmac.compare_digest(message.text or "", app_state.config.admin_password):
+        user_id = message.from_user.id  # type: ignore[union-attr]
+        if gate.is_throttled(user_id):
+            await state.clear()
+            await message.answer(
+                "⏳ Слишко много попыток. "
+                "Попробуйте через 5 минут.",
+                reply_markup=main_menu(),
+            )
+            return
+        if gate.authorize(user_id, message.text or ""):
             await state.clear()
             await message.answer("✅ Добро пожаловать!", reply_markup=admin_menu())
         else:
