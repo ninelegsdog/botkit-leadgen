@@ -8,6 +8,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
 from src.core.bot_factory import AppState
+from src.core.callbacks import parse_callback_int
 from src.core.fsm import LeadForm
 from src.core.nav import main_menu
 from src.core.ui import lead_card, lead_summary
@@ -136,7 +137,10 @@ def create_leadgen_router(app_state: AppState) -> Router:
     async def take_lead_handler(callback: CallbackQuery) -> None:
         if not callback.data:
             return
-        lead_id = int(callback.data.split(":")[1])
+        lead_id = parse_callback_int(callback.data, "lead_take:")
+        if lead_id is None:
+            await callback.answer("Некорректный запрос.", show_alert=True)
+            return
         manager_id = callback.from_user.id
         success = await service.take_lead(db, lead_id, manager_id)
         if not success:
@@ -158,7 +162,10 @@ def create_leadgen_router(app_state: AppState) -> Router:
     async def skip_lead_handler(callback: CallbackQuery) -> None:
         if not callback.data:
             return
-        lead_id = int(callback.data.split(":")[1])
+        lead_id = parse_callback_int(callback.data, "lead_skip:")
+        if lead_id is None:
+            await callback.answer("Некорректный запрос.", show_alert=True)
+            return
         await service.skip_lead(db, lead_id, callback.from_user.id)
         await callback.answer("Пропущено.")
 
