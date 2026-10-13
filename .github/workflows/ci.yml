@@ -58,6 +58,22 @@ jobs:
           fi
           echo "Package version: $VERSION"
           echo "Version drift check passed for $VERSION"
+      # Build the image so a broken Dockerfile fails here rather than on main.
+      #
+      # deploy.yml runs only on push to main, so without this the image was never built on
+      # a PR: a broken Dockerfile merged green and then failed the deploy job after the
+      # merge, where the only remedy is a revert. Same action SHAs as deploy.yml, so the
+      # two workflows cannot drift apart.
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069  # v4.3.0
+      - name: Validate image build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc  # v7.3.0
+        with:
+          context: .
+          push: false
+          build-args: |
+            BUILD_SHA=${{ github.sha }}
+
 
   security:
     runs-on: ubuntu-latest
