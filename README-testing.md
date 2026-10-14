@@ -69,8 +69,16 @@ RUN_TELEGRAM_E2E=0
 
 6. Run: `RUN_TELEGRAM_E2E=1 pytest -m "req and e2e" -n 0 -vv`
 
-E2E waits for replies via `asyncio.Event` + `wait_for` — **no `sleep`**.
-Each run uses a unique correlation token. Do not parallelize a single account.
+`tests/e2e/test_dialog.py` sends `/start` and waits for the bot's greeting
+(`START_GREETING` — the same string the central `ops/e2e` runner asserts) via
+`asyncio.Event` + `wait_for` — **no `sleep`**, no correlation token. A missing
+or wrong greeting fails by timeout, so this test goes green only against a bot
+that really answers. Do not parallelize a single account.
+
+All 9 bots are also exercised end-to-end by the central runner in
+`botkit-monitoring` → `ops/e2e/scenarios.yml` (systemd timer; `send`/`expect`
+steps plus read-only inline `press` steps). This file's `/start` greeting is
+asserted in both places, so the test and the runner cannot drift apart.
 
 ## Secrets
 
