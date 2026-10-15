@@ -76,6 +76,21 @@ jobs:
           build-args: |
             BUILD_SHA=${{ github.sha }}
 
+  # Офлайн-прогоны кейсов фермы по коду этого PR (botkit-farm → farm-smoke.yml).
+  # Отдельный job, а не шаг в check: под ним заработает общий гейт, и его
+  # падение не смешается с падением тестов бота в одном чеке.
+  #
+  # Ссылка на @main, а не на SHA: кейсы живут в ферме и меняются вместе с
+  # дырами, которые закрывают, — пиннинг заморозил бы и проверку. Репозиторий
+  # наш, публичный; ферма и есть источник правды для кейсов.
+  farm-smoke:
+    name: Ферма · офлайн-прогоны
+    permissions:
+      contents: read
+    uses: ninelegsdog/botkit-farm/.github/workflows/farm-smoke.yml@main
+    with:
+      bot: leadgen
+
 
   security:
     runs-on: ubuntu-latest
