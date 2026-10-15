@@ -37,6 +37,19 @@ def redis_container() -> Any:
 @pytest.fixture
 def postgres_url(postgres_container) -> str:
     """Get PostgreSQL connection URL."""
+    # asyncpg is not a declared dependency of this bot: the fixtures below came
+    # from a bot that has it, but no test here asks for db_engine/db_session, so
+    # nothing ever forced the declaration. Fail with the cause rather than let
+    # SQLAlchemy raise a bare ModuleNotFoundError from inside the dialect.
+    import importlib.util
+
+    if importlib.util.find_spec("asyncpg") is None:
+        pytest.fail(
+            "postgres_url builds a postgresql+asyncpg URL, but asyncpg is not a "
+            "declared dependency of this bot. Add \"asyncpg>=0.29\" to the dev "
+            "extra in pyproject.toml and re-run `uv lock` before using db_engine "
+            "or db_session."
+        )
     return postgres_container.get_connection_url().replace("postgresql+psycopg2", "postgresql+asyncpg")
 
 
@@ -102,6 +115,10 @@ def pytest_collection_modifyitems(config: Any, items: Any) -> None:
         fname = Path(path).name if path else ""
         is_req_file = fname == "test_e2e.py"
         if "integration" in item.keywords:
+            if not config.getoption("--run-integration"):
+                item.add_marker(
+                    pytest.mark.skip(reason="set --run-integration to run integration tests")
+                )
             continue
         if "req" in item.keywords or is_req_file:
             if os.getenv("RUN_TELEGRAM_E2E") != "1":
