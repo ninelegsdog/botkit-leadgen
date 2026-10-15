@@ -16,17 +16,17 @@ def create_admin_router(app_state: AppState) -> Router:
     router = Router()
     db = app_state.db
 
-    def is_admin(user_id: int) -> bool:
-        return user_id in (app_state.config.admin_ids or [])
-
     # The password check below compared in constant time but had no attempt
     # limit, so the admin surface allowed unlimited guesses. AdminGate adds the
     # throttle; is_throttled is checked BEFORE authorize so guesses are refused
-    # for the whole window. is_admin keeps its old meaning: config admins, plus
-    # anyone the gate has authorised.
-    gate = AdminGate(
-        app_state.config.admin_password, app_state.config.admin_ids or []
-    )
+    # for the whole window.
+    # The gate tracks only password-authorised users here; configured admins are
+    # read dynamically below, so both sources agree with the running config.
+    gate = AdminGate(app_state.config.admin_password)
+
+    def is_admin(user_id: int) -> bool:
+        # Config admins, plus anyone the gate has authorised.
+        return user_id in (app_state.config.admin_ids or []) or gate.is_admin(user_id)
 
     @router.message(Command("admin"))
     async def cmd_admin(message: Message, state: FSMContext) -> None:
@@ -39,7 +39,7 @@ def create_admin_router(app_state: AppState) -> Router:
         if gate.is_throttled(user_id):
             await state.clear()
             await message.answer(
-                "⏳ Слишко много попыток. "
+                "⏳ Слишком много попыток. "
                 "Попробуйте через 5 минут.",
                 reply_markup=main_menu(),
             )
