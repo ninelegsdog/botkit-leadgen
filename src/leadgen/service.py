@@ -149,6 +149,15 @@ async def get_active_managers(db: Database) -> list[dict[str, Any]]:
         return [dict(r) for r in result.mappings().all()]
 
 
+async def is_active_manager(db: Database, user_id: int) -> bool:
+    async with db.session() as session:
+        result = await session.execute(
+            text("SELECT 1 FROM managers WHERE user_id = :uid AND is_active = 1"),
+            {"uid": user_id},
+        )
+        return result.first() is not None
+
+
 async def get_active_fields(db: Database) -> list[dict[str, Any]]:
     async with db.session() as session:
         result = await session.execute(
