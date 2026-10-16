@@ -175,6 +175,14 @@ def create_leadgen_router(app_state: AppState) -> Router:
 
     @router.message(F.text == "📋 Очередь лидов")
     async def manager_queue(message: Message) -> None:
+        uid = message.from_user.id  # type: ignore[union-attr]
+        # Очередь — менеджерская поверхность: активный менеджер из таблицы
+        # managers либо админ бота (config.admin_ids — тот же паттерн, что
+        # у admin-роутера: is_admin = admin_ids + AdminGate).
+        if not await service.is_active_manager(db, uid) and uid not in (
+            app_state.config.admin_ids or []
+        ):
+            return
         leads = await service.get_new_leads(db)
         if not leads:
             await message.answer("Нет новых лидов.")
