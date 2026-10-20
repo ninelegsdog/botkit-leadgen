@@ -39,6 +39,19 @@ pre-commit run --all-files
 python3 scripts/check-repo-contract.py . scripts/repo-contract.json
 ```
 
+The per-module coverage gate runs in CI after pytest; run it by hand when you
+touch a handler:
+
+```bash
+uv run --frozen pytest --cov=src --cov-report=json:coverage.json
+python3 scripts/check-coverage.py . scripts/coverage-floors.json coverage.json
+```
+
+`coverage-floors.json` sets a floor **per module**, because the total is diluted
+by well-covered infrastructure: a bot can sit at 70% total while the module that
+decides what it answers sits far lower. Floors are a ratchet — raise them as
+coverage improves; do not lower one to make a build green.
+
 Do not report a task as done on the basis of a green build alone. Confirm the
 observable behaviour: the test ran, and it failed when the thing it guards was
 broken.

@@ -1,0 +1,8 @@
+{
+  "$comment": "Per-module coverage floors. Total coverage is diluted by well-covered infrastructure, so a bot could sit at 70% total while the module that decides what it answers sat far lower. Floors are a ratchet: raise them as coverage improves, never lower them to make a build green.",
+  "schema_version": 1,
+  "modules": {
+    "src/admin/handlers.py": 65,
+    "src/leadgen/handlers.py": 25
+  }
+}
