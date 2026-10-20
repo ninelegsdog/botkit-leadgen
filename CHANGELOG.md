@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- `src/leadgen/texts.py` — single source for user-facing strings. A reply used to
+  live as a literal inside `message.answer(...)` and was duplicated in the e2e
+  test and in the farm's `cases/*.yaml`; three copies of one phrase drift on the
+  first edit. Handlers, `core/nav.py` and the e2e test now import the constants.
+  `tests/test_texts_contract.py` guards it, including negative twins: a helper
+  that drops its argument goes red.
 - The repository presents itself as it is. The README became a front page — pitch,
   badges, a table of contents and user-facing sections — and issue forms plus a
   pull-request template now ask for the evidence this project acts on: what was

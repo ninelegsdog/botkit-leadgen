@@ -2,11 +2,13 @@ from __future__ import annotations
 
 from aiogram.types import KeyboardButton, ReplyKeyboardMarkup
 
+from src.leadgen import texts
+
 
 def main_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📝 Оставить заявку"), KeyboardButton(text="📞 Контакты")],
+            [KeyboardButton(text=texts.BTN_NEW_LEAD), KeyboardButton(text=texts.BTN_CONTACTS)],
         ],
         resize_keyboard=True,
     )
@@ -15,7 +17,7 @@ def main_menu() -> ReplyKeyboardMarkup:
 def manager_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="📋 Очередь лидов"), KeyboardButton(text="📊 Моя статистика")],
+            [KeyboardButton(text=texts.BTN_QUEUE), KeyboardButton(text=texts.BTN_MY_STATS)],
         ],
         resize_keyboard=True,
     )
@@ -24,8 +26,8 @@ def manager_menu() -> ReplyKeyboardMarkup:
 def admin_menu() -> ReplyKeyboardMarkup:
     return ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="👥 Менеджеры"), KeyboardButton(text="📊 Статистика")],
-            [KeyboardButton(text="⚙️ Настройки")],
+            [KeyboardButton(text=texts.BTN_MANAGERS), KeyboardButton(text=texts.BTN_STATS)],
+            [KeyboardButton(text=texts.BTN_SETTINGS)],
         ],
         resize_keyboard=True,
     )
