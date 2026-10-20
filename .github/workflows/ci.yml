@@ -26,7 +26,13 @@ jobs:
         run: uv sync --frozen --all-extras
       - run: uv run --frozen ruff check .
       - run: uv run --frozen mypy src/
-      - run: uv run --frozen pytest --run-integration --cov=src --cov-report=xml
+      - run: uv run --frozen pytest --run-integration --cov=src --cov-report=xml --cov-report=json:coverage.json
+      - name: Per-module coverage floors
+        # Total coverage is diluted by well-covered infrastructure: a bot can sit
+        # at 70% total while the module that decides what it answers sits far
+        # lower. This gate checks each bot's own modules against
+        # scripts/coverage-floors.json - not a second aggregate.
+        run: python3 scripts/check-coverage.py . scripts/coverage-floors.json coverage.json
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9  # v7.0.2
         if: always()
         with:
