@@ -22,8 +22,13 @@ pytestmark = [
     pytest.mark.serial,
 ]
 
-# Proven live by the ops/e2e runner: this exact substring is in every /start reply.
+# Подстрока берётся из общего источника текстов бота: раньше здесь лежала своя
+# копия строки, и правка приветствия в `handlers.py` расходилась с тестом молча.
+# ops/e2e runner сверяет тот же текст — теперь оба пути читают одну константу.
+from src.leadgen.texts import WELCOME  # noqa: E402
+
 START_GREETING = "Здравствуйте! Оставьте заявку"
+assert START_GREETING in WELCOME, "тест и текст бота разошлись"
 
 
 async def wait_for_bot_message(client, bot, *, predicate, trigger, wait_timeout):
