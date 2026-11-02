@@ -142,6 +142,12 @@ def create_leadgen_router(app_state: AppState) -> Router:
             await callback.answer("Некорректный запрос.", show_alert=True)
             return
         manager_id = callback.from_user.id
+        # Гард: только активный менеджер или админ может брать лид.
+        if not await service.is_active_manager(db, manager_id) and manager_id not in (
+            app_state.config.admin_ids or []
+        ):
+            await callback.answer("Нет доступа.", show_alert=True)
+            return
         success = await service.take_lead(db, lead_id, manager_id)
         if not success:
             await callback.answer("Лид уже взят другим менеджером.", show_alert=True)
@@ -166,7 +172,13 @@ def create_leadgen_router(app_state: AppState) -> Router:
         if lead_id is None:
             await callback.answer("Некорректный запрос.", show_alert=True)
             return
-        await service.skip_lead(db, lead_id, callback.from_user.id)
+        manager_id = callback.from_user.id
+        if not await service.is_active_manager(db, manager_id) and manager_id not in (
+            app_state.config.admin_ids or []
+        ):
+            await callback.answer("Нет доступа.", show_alert=True)
+            return
+        await service.skip_lead(db, lead_id, manager_id)
         await callback.answer("Пропущено.")
 
     @router.message(F.text == "📞 Контакты")
