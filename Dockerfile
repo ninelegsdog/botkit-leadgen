@@ -24,7 +24,7 @@ RUN --mount=type=secret,id=BOTKIT_CORE_TOKEN bash <<'EOF'
     # core is already pinned by tag where it matters; the line removed here is redundant,
     # not lost - and its own dependencies stay constrained, which is what this file is for.
     grep -v '^botkit-core @ ' /tmp/constraints.txt > /tmp/c.txt && mv /tmp/c.txt /tmp/constraints.txt
-    pip install --no-cache-dir -c /tmp/constraints.txt .
+    pip install --no-cache-dir --no-deps -c /tmp/constraints.txt .
     rm -f ~/.gitconfig /tmp/constraints.txt /usr/local/bin/uv
     apt-get purge -y --auto-remove git
     rm -rf /var/lib/apt/lists/*
