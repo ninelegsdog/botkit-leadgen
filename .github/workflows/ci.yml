@@ -123,7 +123,7 @@ jobs:
           tar -xzf /tmp/gitleaks.tgz -C /tmp gitleaks
           /tmp/gitleaks detect --source . --redact --no-banner --report-format sarif --report-path gitleaks.sarif
       - name: Upload Gitleaks results
-        uses: github/codeql-action/upload-sarif@fddeee1a7ece751b577e409a89057319e3172939  # v4.0.0
+        uses: github/codeql-action/upload-sarif@913e1bb775545322a3613f16c3483c0ac3050da5  # v4.0.0
         if: always()
         continue-on-error: true
         with:
@@ -139,7 +139,7 @@ jobs:
           mkdir -p /tmp/trivybin && tar -xzf /tmp/trivy.tgz -C /tmp/trivybin trivy
           /tmp/trivybin/trivy fs --severity CRITICAL,HIGH --exit-code 1 --format sarif --output trivy-fs.sarif .
       - name: Upload Trivy FS results
-        uses: github/codeql-action/upload-sarif@fddeee1a7ece751b577e409a89057319e3172939  # v4.0.0
+        uses: github/codeql-action/upload-sarif@913e1bb775545322a3613f16c3483c0ac3050da5  # v4.0.0
         if: always()
         continue-on-error: true
         with:
