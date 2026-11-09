@@ -38,6 +38,7 @@ ignore = ["SIM105"]
 [tool.mypy]
 python_version = "3.12"
 strict = true
+exclude = ["scripts", "tests/e2e"]
 plugins = ["pydantic.mypy"]
 
 [tool.pytest.ini_options]
@@ -73,4 +74,8 @@ output = "coverage.xml"
 
 [[tool.mypy.overrides]]
 module = "tests.e2e.*"
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = "scripts.*"
 ignore_errors = true

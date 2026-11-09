@@ -87,8 +87,9 @@ async def redis_client(redis_url: str):
 
 
 @pytest.fixture
-async def db():
-    config = Config(db_path=":memory:")
+async def db(tmp_path: Path) -> Any:
+    db_file = tmp_path / "test_leads.db"
+    config = Config(db_path=str(db_file))
     database = Database(config)
     await migrate(database)
     yield database
