@@ -11,6 +11,7 @@ from scripts.archive_outbox import archive_outbox
 from src.core.config import Config
 from src.core.database import Database
 from src.core.migrations import migrate
+from src.crm import service as crm_service
 
 
 async def _insert_row(db: Database, status: str, days_ago: int, lead_id: int) -> int:
@@ -87,5 +88,91 @@ async def test_archive_dry_run_deletes_nothing(tmp_path) -> None:
 
     assert await _get_status(db, 1) == "sent"  # nothing deleted
     assert await _get_status(db, 2) == "failed"
+
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_dlq_list_and_retry(tmp_path) -> None:
+    """DLQ rows can be listed and requeued back to crm_outbox."""
+    db_path = str(tmp_path / "leads.db")
+    config = Config(db_path=db_path)
+    db = Database(config)
+    await migrate(db)
+
+    # Insert a row directly into crm_dlq
+    async with db.transaction() as session:
+        from sqlalchemy import text as sql_text
+        await session.execute(
+            sql_text(
+                "INSERT INTO crm_dlq (outbox_id, lead_id, provider, payload, "
+                "attempts, last_error, failed_at) "
+                "VALUES (:oid, :lid, :provider, :payload, :attempts, :err, "
+                "datetime('now'))"
+            ),
+            {
+                "oid": 42,
+                "lid": 7,
+                "provider": "generic",
+                "payload": "{}",
+                "attempts": 6,
+                "err": "permanent failure",
+            },
+        )
+
+    # List DLQ
+    rows = await crm_service.dlq_list(db)
+    assert len(rows) == 1
+    assert rows[0]["lead_id"] == 7
+    assert rows[0]["provider"] == "generic"
+    assert rows[0]["attempts"] == 6
+
+    # Retry from DLQ
+    ok = await crm_service.dlq_retry(db, rows[0]["id"])
+    assert ok is True
+
+    # Row should now be in crm_outbox as pending
+    async with db.session() as session:
+        from sqlalchemy import text as sql_text
+        result = await session.execute(
+            sql_text("SELECT status, attempts FROM crm_outbox WHERE lead_id = 7")
+        )
+        row = result.mappings().fetchone()
+        assert row is not None
+        assert row["status"] == "pending"
+        assert row["attempts"] == 0
+
+    # DLQ should be empty now
+    rows_after = await crm_service.dlq_list(db)
+    assert len(rows_after) == 0
+
+    # Retry non-existent id
+    ok2 = await crm_service.dlq_retry(db, 999)
+    assert ok2 is False
+
+    await db.close()
+
+
+@pytest.mark.asyncio
+async def test_enqueue_lead_off_provider_is_noop(tmp_path) -> None:
+    """enqueue_lead with provider='off' must not insert into crm_outbox."""
+    db_path = str(tmp_path / "leads.db")
+    config = Config(db_path=db_path)
+    db = Database(config)
+    await migrate(db)
+
+    await crm_service.enqueue_lead(
+        None,  # type: ignore[arg-type]
+        lead_id=1,
+        lead={"client_name": "X"},
+        provider="off",
+    )
+
+    async with db.session() as session:
+        from sqlalchemy import text as sql_text
+        result = await session.execute(
+            sql_text("SELECT COUNT(*) FROM crm_outbox WHERE lead_id = 1")
+        )
+        assert result.scalar_one() == 0
 
     await db.close()

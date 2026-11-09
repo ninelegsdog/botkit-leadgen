@@ -70,10 +70,28 @@ CREATE TABLE IF NOT EXISTS crm_outbox (
     last_error TEXT,
     external_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    claimed_by TEXT,
+    claimed_at TEXT,
     UNIQUE (lead_id, provider)
 );
 
 CREATE INDEX IF NOT EXISTS idx_crm_outbox_due ON crm_outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_claimed ON crm_outbox(claimed_by, claimed_at);
+
+CREATE TABLE IF NOT EXISTS crm_dlq (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outbox_id INTEGER NOT NULL,
+    lead_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    failed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (outbox_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_dlq_provider ON crm_dlq(provider);
+CREATE INDEX IF NOT EXISTS idx_crm_dlq_failed_at ON crm_dlq(failed_at);
 """
 
 

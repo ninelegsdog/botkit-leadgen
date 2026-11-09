@@ -84,9 +84,10 @@ async def process_batch(
     limit: int = 20,
     backoff_seconds: tuple[int, ...] = service.BACKOFF_SECONDS,
     client: httpx.AsyncClient | None = None,
+    worker_id: str | None = None,
 ) -> int:
     """Deliver one batch. Returns the number of successfully delivered leads."""
-    rows = await service.claim_batch(db, limit)
+    rows = await service.claim_batch(db, limit, worker_id=worker_id)
     delivered = 0
     for row in rows:
         provider = str(row["provider"])
@@ -151,17 +152,22 @@ async def worker_loop(db: Database, config: Config, stop_event: asyncio.Event) -
         logger.info("CRM export disabled (CRM_PROVIDER=off)")
         return
     logger.info("CRM export worker started: provider=%s", settings.provider)
-    while not stop_event.is_set():
-        try:
-            await process_batch(
-                db, settings,
-                max_attempts=config.crm_max_attempts,
-                backoff_seconds=config.crm_backoff_seconds,
-            )
-        except Exception:  # noqa: BLE001 - keep the loop alive across DB hiccups
-            logger.exception("CRM export batch failed")
-        with suppress(asyncio.TimeoutError):
-            await asyncio.wait_for(stop_event.wait(), timeout=config.crm_poll_seconds)
+    # Single HTTP client reused across all batches — avoids TCP/TLS handshake per lead.
+    timeout = httpx.Timeout(settings.timeout, connect=5.0)
+    async with httpx.AsyncClient(timeout=timeout) as client:
+        while not stop_event.is_set():
+            try:
+                await process_batch(
+                    db, settings,
+                    max_attempts=config.crm_max_attempts,
+                    backoff_seconds=config.crm_backoff_seconds,
+                    client=client,
+                    worker_id=f"worker-{id(client)}",
+                )
+            except Exception:  # noqa: BLE001 - keep the loop alive across DB hiccups
+                logger.exception("CRM export batch failed")
+            with suppress(asyncio.TimeoutError):
+                await asyncio.wait_for(stop_event.wait(), timeout=config.crm_poll_seconds)
     logger.info("CRM export worker stopped")
 
 
@@ -173,16 +179,39 @@ async def _cli(args: argparse.Namespace) -> int:
         if args.retry_failed:
             count = await service.retry_failed(db)
             print(f"requeued: {count}")
+        if args.dlq_list:
+            rows = await service.dlq_list(db)
+            if not rows:
+                print("DLQ is empty")
+            else:
+                print(f"{'ID':<6} {'OutboxID':<10} {'LeadID':<8} {'Provider':<12} {'Attempts':<10} {'FailedAt'}")
+                print("-" * 80)
+                for r in rows:
+                    print(
+                        f"{r['id']:<6} {r['outbox_id']:<10} {r['lead_id']:<8} "
+                        f"{r['provider']:<12} {r['attempts']:<10} {r['failed_at']}"
+                    )
+                    if r["last_error"]:
+                        print(f"    error: {r['last_error'][:200]}")
+        if args.dlq_retry is not None:
+            ok = await service.dlq_retry(db, args.dlq_retry)
+            if ok:
+                print(f"DLQ id={args.dlq_retry} requeued to crm_outbox")
+            else:
+                print(f"DLQ id={args.dlq_retry} not found")
         if args.test:
             row_id = await service.enqueue_test(db, config.crm_provider)
             print(f"test lead queued: outbox id={row_id}")
         if args.once or args.test:
             settings = CrmSettings.from_config(config)
-            delivered = await process_batch(
-                db, settings,
-                max_attempts=config.crm_max_attempts,
-                backoff_seconds=config.crm_backoff_seconds,
-            )
+            timeout = httpx.Timeout(settings.timeout, connect=5.0)
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                delivered = await process_batch(
+                    db, settings,
+                    max_attempts=config.crm_max_attempts,
+                    backoff_seconds=config.crm_backoff_seconds,
+                    client=client,
+                )
             print(f"delivered: {delivered}")
         return 0
     finally:
@@ -194,6 +223,17 @@ def main() -> None:
     parser.add_argument("--once", action="store_true", help="process one batch and exit")
     parser.add_argument("--test", action="store_true", help="queue and send a test lead")
     parser.add_argument("--retry-failed", action="store_true", help="return failed rows to the queue")
+    parser.add_argument(
+        "--dlq-list",
+        action="store_true",
+        help="list dead-letter queue rows (most recent first)",
+    )
+    parser.add_argument(
+        "--dlq-retry",
+        type=int,
+        metavar="ID",
+        help="requeue a DLQ row by id back to crm_outbox",
+    )
     args = parser.parse_args()
     raise SystemExit(asyncio.run(_cli(args)))
 

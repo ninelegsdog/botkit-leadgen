@@ -119,12 +119,12 @@ async def test_worker_marks_failed_after_max_attempts(db: Database) -> None:
         await process_batch(db, settings, max_attempts=1, client=client)
     async with db.session() as session:
         row = await session.execute(
-            text("SELECT status, attempts FROM crm_outbox WHERE lead_id = 7")
+            text("SELECT attempts, last_error FROM crm_dlq WHERE lead_id = 7")
         )
         mapping = row.mappings().fetchone()
     assert mapping is not None
-    assert mapping["status"] == "failed"
     assert mapping["attempts"] == 1
+    assert mapping["last_error"] is not None
 
 
 @pytest.mark.asyncio

@@ -88,6 +88,8 @@ def upgrade() -> None:
         last_error TEXT,
         external_id TEXT,
         created_at TEXT NOT NULL DEFAULT (datetime('now')),
+        claimed_by TEXT,
+        claimed_at TEXT,
         UNIQUE (lead_id, provider)
     );
 

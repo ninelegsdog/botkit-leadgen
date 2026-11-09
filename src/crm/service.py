@@ -2,6 +2,8 @@
 
 The outbox row is written in the same transaction as the lead. Delivery is a
 separate concern: the worker can fail, retry and lag without ever losing a lead.
+Permanently failed rows are archived to the dead-letter queue (crm_dlq) so no
+lead is ever silently dropped.
 """
 
 from __future__ import annotations
@@ -85,25 +87,51 @@ async def enqueue_test(db: Database, provider: str) -> int:
         return int(result.lastrowid or 0)  # type: ignore[attr-defined]
 
 
-async def claim_batch(db: Database, limit: int = 20) -> list[dict[str, Any]]:
+async def claim_batch(
+    db: Database,
+    limit: int = 20,
+    worker_id: str | None = None,
+    stale_after_seconds: int = 300,
+) -> list[dict[str, Any]]:
     """Atomically move due rows to 'sending' and return them.
 
     RETURNING makes the claim a single statement, so two workers cannot send the
-    same row twice.
+    same row twice. Rows claimed by another worker more than
+    ``stale_after_seconds`` ago are reclaimed (stale claim recovery).
     """
     async with db.transaction() as session:
         result = await session.execute(
             text(
-                "UPDATE crm_outbox SET status = 'sending', attempts = attempts + 1 "
+                "UPDATE crm_outbox SET status = 'sending', attempts = attempts + 1, "
+                "claimed_by = :worker_id, claimed_at = datetime('now') "
                 "WHERE id IN ("
                 "  SELECT id FROM crm_outbox "
-                "  WHERE status = 'pending' AND next_attempt_at <= datetime('now') "
+                "  WHERE ("
+                "    (status = 'pending' AND next_attempt_at <= datetime('now'))"
+                "    OR (claimed_by IS NOT NULL AND claimed_at <= datetime('now', :stale_clause))"
+                "  )"
                 "  ORDER BY id LIMIT :limit"
-                ") RETURNING id, lead_id, provider, payload, attempts"
+                ") RETURNING id, lead_id, provider, payload, attempts, claimed_by"
             ),
-            {"limit": limit},
+            {
+                "limit": limit,
+                "worker_id": worker_id,
+                "stale_clause": f"-{stale_after_seconds} seconds",
+            },
         )
         return [dict(row) for row in result.mappings().all()]
+
+
+async def release_claim(db: Database, row_id: int) -> None:  # pragma: no cover
+    """Release a claim on an outbox row (set status back to pending, clear claimed_by)."""
+    async with db.transaction() as session:
+        await session.execute(
+            text(
+                "UPDATE crm_outbox SET status = 'pending', claimed_by = NULL, "
+                "claimed_at = NULL WHERE id = :id"
+            ),
+            {"id": row_id},
+        )
 
 
 async def mark_sent(db: Database, row_id: int, external_id: str) -> None:
@@ -143,10 +171,42 @@ async def mark_retry(
 
 
 async def mark_failed(db: Database, row_id: int, error: str) -> None:
+    """Move a permanently failed outbox row to the dead-letter queue.
+
+    The row is copied to crm_dlq and deleted from crm_outbox so it is never
+    silently lost and can be inspected or retried manually.
+    """
     async with db.transaction() as session:
+        # Read the row before deleting it.
+        result = await session.execute(
+            text(
+                "SELECT lead_id, provider, payload, attempts, last_error "
+                "FROM crm_outbox WHERE id = :id"
+            ),
+            {"id": row_id},
+        )
+        row = result.mappings().fetchone()
+        if row is None:
+            return
         await session.execute(
-            text("UPDATE crm_outbox SET status = 'failed', last_error = :err WHERE id = :id"),
-            {"id": row_id, "err": error[:1000]},
+            text(
+                "INSERT INTO crm_dlq (outbox_id, lead_id, provider, payload, "
+                "attempts, last_error, failed_at) "
+                "VALUES (:oid, :lid, :provider, :payload, :attempts, :err, "
+                "datetime('now'))"
+            ),
+            {
+                "oid": row_id,
+                "lid": row["lead_id"],
+                "provider": row["provider"],
+                "payload": row["payload"],
+                "attempts": row["attempts"],
+                "err": error[:1000],
+            },
+        )
+        await session.execute(
+            text("DELETE FROM crm_outbox WHERE id = :id"),
+            {"id": row_id},
         )
 
 
@@ -168,3 +228,51 @@ async def retry_failed(db: Database) -> int:
             )
         )
         return int(result.rowcount or 0)  # type: ignore[attr-defined]
+
+
+async def dlq_list(db: Database, limit: int = 100) -> list[dict[str, Any]]:
+    """List dead-letter queue rows, most recent first."""
+    async with db.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT id, outbox_id, lead_id, provider, payload, attempts, "
+                "last_error, failed_at FROM crm_dlq "
+                "ORDER BY failed_at DESC LIMIT :limit"
+            ),
+            {"limit": limit},
+        )
+        return [dict(row) for row in result.mappings().all()]
+
+
+async def dlq_retry(db: Database, dlq_id: int) -> bool:
+    """Move a DLQ row back to crm_outbox with attempts reset to 0.
+
+    Returns True if the row was found and requeued, False otherwise.
+    """
+    async with db.transaction() as session:
+        result = await session.execute(
+            text(
+                "SELECT lead_id, provider, payload FROM crm_dlq WHERE id = :id"
+            ),
+            {"id": dlq_id},
+        )
+        row = result.mappings().fetchone()
+        if row is None:
+            return False
+        await session.execute(
+            text(
+                "INSERT INTO crm_outbox (lead_id, provider, payload, status, "
+                "attempts, next_attempt_at) "
+                "VALUES (:lid, :provider, :payload, 'pending', 0, datetime('now'))"
+            ),
+            {
+                "lid": row["lead_id"],
+                "provider": row["provider"],
+                "payload": row["payload"],
+            },
+        )
+        await session.execute(
+            text("DELETE FROM crm_dlq WHERE id = :id"),
+            {"id": dlq_id},
+        )
+        return True
