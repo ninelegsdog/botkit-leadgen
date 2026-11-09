@@ -14,6 +14,7 @@ async def create_lead(
     client_name: str | None = None,
     client_phone: str | None = None,
     field_values: str = "{}",
+    crm_provider: str = "off",
 ) -> int:
     async with db.transaction() as session:
         result = await session.execute(
@@ -29,6 +30,23 @@ async def create_lead(
             text("INSERT INTO lead_events (lead_id, user_id, action) VALUES (:lid, :uid, 'created')"),
             {"lid": lead_id, "uid": client_user_id},
         )
+        if crm_provider != "off":
+            from datetime import UTC, datetime
+
+            from src.crm.service import enqueue_lead
+
+            await enqueue_lead(
+                session,
+                lead_id=int(lead_id),
+                lead={
+                    "client_user_id": client_user_id,
+                    "client_name": client_name,
+                    "client_phone": client_phone,
+                    "field_values": field_values,
+                    "created_at": datetime.now(UTC).strftime("%Y-%m-%d %H:%M:%S"),
+                },
+                provider=crm_provider,
+            )
         return int(lead_id)
 
 

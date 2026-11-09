@@ -1,0 +1,29 @@
+name: botkit-leadgen-mock
+
+services:
+  mock-crm:
+    build:
+      context: .
+      dockerfile: tests/mock_crm/Dockerfile
+    container_name: botkit-leadgen-mock-crm
+    ports:
+      - "127.0.0.1:8090:8090"
+    read_only: true
+    tmpfs:
+      - /tmp
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    user: "1001:1001"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python3", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8090/health',timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+networks:
+  default:
+    name: botkit_leadgen_mock
+    external: true

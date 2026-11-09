@@ -17,7 +17,11 @@ class Database:
         )
         self._session_factory = sessionmaker(  # type: ignore[call-overload]
     self._engine, class_=AsyncSession, expire_on_commit=False
-)
+    )
+
+    @property
+    def url(self) -> str:
+        return str(self._engine.url)
 
     @asynccontextmanager
     async def session(self) -> AsyncIterator[AsyncSession]:
