@@ -124,6 +124,7 @@ scans the filesystem with Trivy, and validates the k6 load script.
 src/
 ├── admin/  handlers.py
 ├── core/  auth.py, bot_factory.py, callbacks.py, config.py, database.py, errors.py
+├── crm/  adapters.py, service.py, worker.py
 ├── escalation/  scheduler.py
 └── leadgen/  handlers.py, service.py
 ```
