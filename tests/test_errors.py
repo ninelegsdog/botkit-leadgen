@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 from typing import Any
 
 from aiogram.exceptions import TelegramNetworkError, TelegramRetryAfter
@@ -30,6 +31,7 @@ async def test_network_error_handled() -> None:
 
 
 async def test_unhandled_logged(caplog: Any) -> None:
+    caplog.set_level(logging.CRITICAL, logger="src.core.errors")
     await default_error_handler(event=None, exception=ValueError("x"))  # type: ignore[arg-type]
     assert "Unhandled error" in caplog.text
 
