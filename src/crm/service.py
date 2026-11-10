@@ -400,3 +400,29 @@ async def dlq_retry(db: Database, dlq_id: int) -> bool:
         except Exception:  # noqa: BLE001 - metric update must not break retry
             pass
         return True
+
+
+async def save_amocrm_access_token(db: Database, token: str) -> None:
+    """Persist refreshed AmoCRM access token so it survives bot restarts."""
+    async with db.transaction() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO settings (key, value) VALUES ('crm_amocrm_access_token', :token)
+                ON CONFLICT(key) DO UPDATE SET value = excluded.value
+                """
+            ),
+            {"token": token},
+        )
+
+
+async def load_amocrm_access_token(db: Database) -> str | None:
+    """Load persisted AmoCRM access token, if any."""
+    async with db.session() as session:
+        result = await session.execute(
+            text(
+                "SELECT value FROM settings WHERE key = 'crm_amocrm_access_token'"
+            )
+        )
+        row = result.mappings().fetchone()
+        return str(row["value"]) if row else None

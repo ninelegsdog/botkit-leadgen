@@ -11,10 +11,14 @@ import hashlib
 import hmac
 import json
 import logging
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
 import httpx
+
+from src.core.database import Database
+from src.crm.service import save_amocrm_access_token
 
 logger = logging.getLogger(__name__)
 
@@ -145,7 +149,8 @@ async def _post(
 
 
 async def _push_bitrix24(
-    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None
+    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None,
+    db: Database | None = None,
 ) -> str:
     url = (
         f"{settings.base_url}/rest/{settings.bitrix_user_id}/"
@@ -211,7 +216,8 @@ async def _amocrm_refresh_token(
 
 
 async def _push_amocrm(
-    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None
+    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None,
+    db: Database | None = None,
 ) -> str:
     url = f"{settings.base_url}/api/v4/leads"
     custom_fields: list[dict[str, Any]] = []
@@ -241,6 +247,8 @@ async def _push_amocrm(
     if response.status_code == 401:
         # Access token expired: refresh once and retry.
         new_token = await _amocrm_refresh_token(settings, client)
+        if db is not None:
+            await save_amocrm_access_token(db, new_token)
         response = await _post(
             settings,
             url,
@@ -259,7 +267,8 @@ async def _push_amocrm(
 
 
 async def _push_generic(
-    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None
+    lead: dict[str, Any], settings: CrmSettings, client: httpx.AsyncClient | None,
+    db: Database | None = None,
 ) -> str:
     body = json.dumps({"event": "lead.created", "lead": lead}, ensure_ascii=False).encode("utf-8")
     headers = {
@@ -280,7 +289,7 @@ async def _push_generic(
     return str(response.headers.get("X-External-Id", ""))
 
 
-_ADAPTERS = {
+_ADAPTERS: dict[str, Callable[..., Any]] = {
     "bitrix24": _push_bitrix24,
     "amocrm": _push_amocrm,
     "generic": _push_generic,
@@ -291,13 +300,14 @@ async def push(
     lead: dict[str, Any],
     settings: CrmSettings,
     client: httpx.AsyncClient | None = None,
+    db: Database | None = None,
 ) -> str:
     """Send one lead to the configured provider. Returns the external id."""
     adapter = _ADAPTERS.get(settings.provider)
     if adapter is None:
         raise CrmPermanentError(f"unknown CRM provider: {settings.provider!r}")
     try:
-        return await adapter(lead, settings, client)
+        return await adapter(lead, settings, client, db=db)  # type: ignore[no-any-return]
     except httpx.TimeoutException as exc:
         raise CrmTransientError(f"{settings.provider} timeout: {exc}") from exc
     except httpx.TransportError as exc:
