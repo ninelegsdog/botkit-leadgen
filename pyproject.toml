@@ -6,7 +6,7 @@ build-backend = "setuptools.build_meta"
 name = "botkit-leadgen"
 version = "1.0.0"
 description = "Telegram lead generation bot — collect leads, route to managers"
-requires-python = ">=3.12"
+requires-python = ">=3.12,<3.13"
 dependencies = [
     "prometheus-client>=0.20",
     "sentry-sdk>=2.0",
@@ -16,7 +16,7 @@ dependencies = [
     "sqlalchemy[asyncio]>=2.0",
     "redis>=5.0",
     "httpx>=0.28",
-    "alembic>=2.0",
+    "alembic>=1.0",
     "botkit-core @ git+https://github.com/ninelegsdog/botkit-core@v0.8.5",
 ]
 
