@@ -26,6 +26,10 @@ class CrmError(Exception):
 class CrmTransientError(CrmError):
     """Network, timeout, rate limit or 5xx: safe to retry."""
 
+    def __init__(self, message: str, retry_after: int | None = None) -> None:
+        super().__init__(message)
+        self.retry_after = retry_after
+
 
 class CrmPermanentError(CrmError):
     """Bad credentials or payload: retrying will not help."""
@@ -38,6 +42,9 @@ class CrmSettings:
     webhook_secret: str = ""
     base_url: str = ""
     access_token: str = ""
+    amocrm_refresh_token: str = ""
+    amocrm_client_id: str = ""
+    amocrm_client_secret: str = ""
     bitrix_user_id: str = ""
     bitrix_webhook_token: str = ""
     timeout: float = 10.0
@@ -50,6 +57,9 @@ class CrmSettings:
             webhook_secret=config.crm_webhook_secret,
             base_url=config.crm_base_url,
             access_token=config.crm_access_token,
+            amocrm_refresh_token=config.crm_amocrm_refresh_token,
+            amocrm_client_id=config.crm_amocrm_client_id,
+            amocrm_client_secret=config.crm_amocrm_client_secret,
             bitrix_user_id=config.crm_bitrix_user_id,
             bitrix_webhook_token=config.crm_bitrix_webhook_token,
             timeout=config.crm_timeout_seconds,
@@ -86,8 +96,16 @@ def _check_response(response: httpx.Response, provider: str) -> None:
         if isinstance(body, dict) and body.get("error"):
             detail = str(body.get("error"))[:300]
             message = f"{provider} API error: {detail}"
-            if body.get("error_code") in {429} or str(body.get("error_code", "")).startswith("5"):
-                raise CrmTransientError(message)
+            error_code = body.get("error_code")
+            if error_code in {429} or str(error_code or "").startswith("5"):
+                retry_after = None
+                ra = response.headers.get("Retry-After") or response.headers.get("retry-after")
+                if ra:
+                    try:
+                        retry_after = int(ra)
+                    except ValueError:
+                        retry_after = None
+                raise CrmTransientError(message, retry_after=retry_after)
             raise CrmPermanentError(message)
         return
     if response.status_code == 409:
@@ -96,7 +114,15 @@ def _check_response(response: httpx.Response, provider: str) -> None:
     detail = response.text[:300]
     message = f"{provider} HTTP {response.status_code}: {detail}"
     if response.status_code in {408, 425, 429} or response.status_code >= 500:
-        raise CrmTransientError(message)
+        retry_after = None
+        ra = response.headers.get("Retry-After") or response.headers.get("retry-after")
+        if ra:
+            try:
+                retry_after = int(ra)
+            except ValueError:
+                # HTTP-date format — ignore, fall back to backoff.
+                retry_after = None
+        raise CrmTransientError(message, retry_after=retry_after)
     raise CrmPermanentError(message)
 
 
@@ -105,8 +131,13 @@ async def _post(
     url: str,
     *,
     client: httpx.AsyncClient | None,
+    correlation_id: str | None = None,
     **kwargs: Any,
 ) -> httpx.Response:
+    if correlation_id:
+        headers = dict(kwargs.get("headers") or {})
+        headers["X-Correlation-ID"] = correlation_id
+        kwargs["headers"] = headers
     if client is not None:
         return await client.post(url, **kwargs)
     async with httpx.AsyncClient(timeout=settings.timeout) as owned:
@@ -130,7 +161,11 @@ async def _push_bitrix24(
     }
     if phone:
         fields["PHONE"] = [{"VALUE": phone, "VALUE_TYPE": "WORK"}]
-    response = await _post(settings, url, client=client, json={"fields": fields})
+    response = await _post(
+        settings, url, client=client,
+        json={"fields": fields},
+        correlation_id=str(lead.get("correlation_id") or ""),
+    )
     _check_response(response, "bitrix24")
     try:
         external_id = response.json().get("result")
@@ -139,6 +174,40 @@ async def _push_bitrix24(
     if external_id is None and response.status_code != 409:
         raise CrmPermanentError("bitrix24 response has no result id")
     return str(external_id) if external_id is not None else ""
+
+
+async def _amocrm_refresh_token(
+    settings: CrmSettings, client: httpx.AsyncClient | None
+) -> str:
+    """Refresh AmoCRM access token using refresh token grant.
+
+    Returns the new access token or raises CrmPermanentError if refresh fails.
+    """
+    url = f"{settings.base_url}/oauth2/access_token"
+    data = {
+        "grant_type": "refresh_token",
+        "client_id": settings.amocrm_client_id,
+        "client_secret": settings.amocrm_client_secret,
+        "refresh_token": settings.amocrm_refresh_token,
+    }
+    try:
+        response = await _post(
+            settings, url, client=client, data=data,
+            headers={"Content-Type": "application/x-www-form-urlencoded"},
+        )
+    except (CrmTransientError, CrmPermanentError) as exc:
+        raise CrmPermanentError(f"amocrm token refresh failed: {exc}") from exc
+    if response.status_code != 200:
+        raise CrmPermanentError(
+            f"amocrm token refresh HTTP {response.status_code}: {response.text[:200]}"
+        )
+    try:
+        token_data = response.json()
+        return str(token_data["access_token"])
+    except (KeyError, TypeError, ValueError) as exc:
+        raise CrmPermanentError(
+            f"amocrm token refresh response has no access_token: {exc}"
+        ) from exc
 
 
 async def _push_amocrm(
@@ -167,7 +236,18 @@ async def _push_amocrm(
         client=client,
         json=body,
         headers={"Authorization": f"Bearer {settings.access_token}"},
+        correlation_id=str(lead.get("correlation_id") or ""),
     )
+    if response.status_code == 401:
+        # Access token expired: refresh once and retry.
+        new_token = await _amocrm_refresh_token(settings, client)
+        response = await _post(
+            settings,
+            url,
+            client=client,
+            json=body,
+            headers={"Authorization": f"Bearer {new_token}"},
+        )
     _check_response(response, "amocrm")
     if response.status_code == 409:
         return ""
@@ -192,7 +272,9 @@ async def _push_generic(
         ).hexdigest()
         headers["X-Signature"] = f"sha256={digest}"
     response = await _post(
-        settings, settings.webhook_url, client=client, content=body, headers=headers
+        settings, settings.webhook_url, client=client, content=body,
+        headers=headers,
+        correlation_id=str(lead.get("correlation_id") or ""),
     )
     _check_response(response, "generic")
     return str(response.headers.get("X-External-Id", ""))

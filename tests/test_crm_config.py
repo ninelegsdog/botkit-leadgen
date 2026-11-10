@@ -56,3 +56,28 @@ def test_backoff_env_rejects_empty(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("CRM_BACKOFF_SECONDS", "   ")
     with pytest.raises(RuntimeError, match="CRM_BACKOFF_SECONDS"):
         Config.from_env()
+
+
+def test_validate_crm_amocrm_requires_refresh_token_fields() -> None:
+    cfg = Config(
+        crm_provider="amocrm",
+        crm_base_url="https://example.amocrm.ru",
+        crm_access_token="token",
+        crm_amocrm_refresh_token="",
+        crm_amocrm_client_id="",
+        crm_amocrm_client_secret="",
+    )
+    with pytest.raises(RuntimeError, match="CRM_AMOCRM_REFRESH_TOKEN"):
+        cfg.validate_crm()
+
+
+def test_validate_crm_amocrm_with_refresh_fields_is_valid() -> None:
+    cfg = Config(
+        crm_provider="amocrm",
+        crm_base_url="https://example.amocrm.ru",
+        crm_access_token="token",
+        crm_amocrm_refresh_token="refresh",
+        crm_amocrm_client_id="client-id",
+        crm_amocrm_client_secret="client-secret",
+    )
+    cfg.validate_crm()  # should not raise

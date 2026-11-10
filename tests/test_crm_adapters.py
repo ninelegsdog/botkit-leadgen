@@ -133,3 +133,51 @@ async def test_unknown_provider_is_permanent() -> None:
     settings = CrmSettings(provider="salesforce")
     with pytest.raises(CrmPermanentError):
         await push({"id": 4, "field_values": "{}"}, settings)
+
+
+@pytest.mark.asyncio
+async def test_retry_after_header_parsed() -> None:
+    """429 with Retry-After → CrmTransientError with retry_after set."""
+    from src.crm.adapters import CrmTransientError
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            429, json={"error": "rate limited"},
+            headers={"Retry-After": "120"},
+        )
+
+    settings = CrmSettings(provider="generic", webhook_url="https://example.com/hook")
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        with pytest.raises(CrmTransientError) as exc:
+            await push({"id": 1, "field_values": "{}"}, settings, client)
+    assert exc.value.retry_after == 120
+
+
+@pytest.mark.asyncio
+async def test_correlation_id_header_sent() -> None:
+    """X-Correlation-ID header is present in CRM request."""
+    captured = {}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        captured["correlation_id"] = request.headers.get("X-Correlation-ID", "")
+        return httpx.Response(200, json={"result": 1})
+
+    settings = CrmSettings(
+        provider="bitrix24",
+        base_url="https://portal.bitrix24.ru",
+        bitrix_user_id="1",
+        bitrix_webhook_token="token",
+    )
+    transport = httpx.MockTransport(handler)
+    async with httpx.AsyncClient(transport=transport) as client:
+        await push(
+            {
+                "id": 1,
+                "client_name": "Alice",
+                "correlation_id": "corr-abc-123",
+            },
+            settings,
+            client,
+        )
+    assert captured["correlation_id"] == "corr-abc-123"

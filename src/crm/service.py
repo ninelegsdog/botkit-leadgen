@@ -11,6 +11,7 @@ from __future__ import annotations
 import json
 import logging
 import random
+import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -18,6 +19,8 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.core.database import Database
+from src.core.metrics import CRM_DLQ_DEPTH
+from src.core.migrations import CRM_PAYLOAD_SCHEMA_VERSION
 
 logger = logging.getLogger(__name__)
 
@@ -36,6 +39,7 @@ def utc_now() -> str:
 def build_payload(lead: dict[str, Any]) -> str:
     return json.dumps(
         {
+            "schema_version": CRM_PAYLOAD_SCHEMA_VERSION,
             "id": lead.get("id"),
             "client_name": lead.get("client_name"),
             "client_phone": lead.get("client_phone"),
@@ -56,12 +60,20 @@ async def enqueue_lead(
     """Queue a lead for export inside the caller's transaction."""
     if provider == "off":
         return
+    correlation_id = lead.get("correlation_id") or str(uuid.uuid4())
     await session.execute(
         text(
-            "INSERT OR IGNORE INTO crm_outbox (lead_id, provider, payload) "
-            "VALUES (:lid, :provider, :payload)"
+            "INSERT OR IGNORE INTO crm_outbox (lead_id, provider, payload, "
+            "payload_version, correlation_id) "
+            "VALUES (:lid, :provider, :payload, :version, :corr_id)"
         ),
-        {"lid": lead_id, "provider": provider, "payload": build_payload({**lead, "id": lead_id})},
+        {
+            "lid": lead_id,
+            "provider": provider,
+            "payload": build_payload({**lead, "id": lead_id, "correlation_id": correlation_id}),
+            "version": CRM_PAYLOAD_SCHEMA_VERSION,
+            "corr_id": correlation_id,
+        },
     )
 
 
@@ -122,18 +134,6 @@ async def claim_batch(
         return [dict(row) for row in result.mappings().all()]
 
 
-async def release_claim(db: Database, row_id: int) -> None:  # pragma: no cover
-    """Release a claim on an outbox row (set status back to pending, clear claimed_by)."""
-    async with db.transaction() as session:
-        await session.execute(
-            text(
-                "UPDATE crm_outbox SET status = 'pending', claimed_by = NULL, "
-                "claimed_at = NULL WHERE id = :id"
-            ),
-            {"id": row_id},
-        )
-
-
 async def mark_sent(db: Database, row_id: int, external_id: str) -> None:
     async with db.transaction() as session:
         await session.execute(
@@ -152,13 +152,18 @@ async def mark_retry(
     error: str,
     max_attempts: int,
     backoff_seconds: tuple[int, ...] = BACKOFF_SECONDS,
+    retry_after: int | None = None,
 ) -> None:
     if attempts >= max_attempts:
         await mark_failed(db, row_id, error)
         return
-    base_delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
-    jitter = random.uniform(-JITTER_RATIO, JITTER_RATIO) * base_delay
-    delay = max(0, base_delay + jitter)
+    # If the CRM returned Retry-After, honour it instead of computed backoff.
+    if retry_after is not None and retry_after > 0:
+        delay = float(retry_after)
+    else:
+        base_delay = backoff_seconds[min(attempts - 1, len(backoff_seconds) - 1)]
+        jitter = random.uniform(-JITTER_RATIO, JITTER_RATIO) * base_delay
+        delay = max(0, base_delay + jitter)
     next_at = (datetime.now(UTC) + timedelta(seconds=delay)).strftime("%Y-%m-%d %H:%M:%S")
     async with db.transaction() as session:
         await session.execute(
@@ -167,6 +172,97 @@ async def mark_retry(
                 "next_attempt_at = :next WHERE id = :id"
             ),
             {"id": row_id, "err": error[:1000], "next": next_at},
+        )
+
+
+
+async def record_idempotency_key(
+    db: Database,
+    *,
+    key: str,
+    provider: str,
+    lead_id: int,
+    response_status: str = "pending",
+    response_body: str | None = None,
+    external_id: str | None = None,
+) -> None:
+    """Record or upsert an idempotency key before/after CRM delivery."""
+    async with db.transaction() as session:
+        await session.execute(
+            text(
+                """
+                INSERT INTO crm_idempotency_keys
+                    (key, provider, lead_id, response_status, response_body,
+                     external_id, created_at, delivered_at)
+                VALUES (:key, :provider, :lead_id, :status, :body, :ext,
+                        datetime('now'), NULL)
+                ON CONFLICT(key) DO UPDATE SET
+                    response_status = excluded.response_status,
+                    response_body = excluded.response_body,
+                    external_id = excluded.external_id,
+                    delivered_at = CASE WHEN excluded.response_status = 'delivered'
+                                        THEN datetime('now')
+                                        ELSE crm_idempotency_keys.delivered_at END
+                """
+            ),
+            {
+                "key": key,
+                "provider": provider,
+                "lead_id": lead_id,
+                "status": response_status,
+                "body": response_body,
+                "ext": external_id,
+            },
+        )
+
+
+async def check_idempotency_key(
+    db: Database, *, key: str
+) -> dict[str, str] | None:
+    """Return cached response if the key was already delivered, else None."""
+    async with db.session() as session:
+        result = await session.execute(
+            text(
+                """
+                SELECT response_status, response_body, external_id, delivered_at
+                FROM crm_idempotency_keys WHERE key = :key
+                """
+            ),
+            {"key": key},
+        )
+        row = result.mappings().fetchone()
+        if row is None:
+            return None
+        if row["response_status"] == "delivered":
+            return {
+                "status": row["response_status"],
+                "body": row["response_body"] or "",
+                "external_id": row["external_id"] or "",
+            }
+        return None
+
+
+async def update_idempotency_key_delivered(
+    db: Database,
+    *,
+    key: str,
+    external_id: str,
+    response_body: str,
+) -> None:
+    """Mark an idempotency key as delivered after successful CRM push."""
+    async with db.transaction() as session:
+        await session.execute(
+            text(
+                """
+                UPDATE crm_idempotency_keys
+                SET response_status = 'delivered',
+                    external_id = :ext,
+                    response_body = :body,
+                    delivered_at = datetime('now')
+                WHERE key = :key
+                """
+            ),
+            {"key": key, "ext": external_id, "body": response_body[:5000]},
         )
 
 
@@ -208,6 +304,20 @@ async def mark_failed(db: Database, row_id: int, error: str) -> None:
             text("DELETE FROM crm_outbox WHERE id = :id"),
             {"id": row_id},
         )
+        # Update DLQ depth metric for the provider.
+        try:
+            result = await session.execute(
+                text(
+                    "SELECT provider, COUNT(*) as cnt FROM crm_dlq "
+                    "GROUP BY provider"
+                )
+            )
+            for provider_row in result.mappings().all():
+                CRM_DLQ_DEPTH.labels(provider=provider_row["provider"]).set(
+                    int(provider_row["cnt"])
+                )
+        except Exception:  # noqa: BLE001 - metric update must not break delivery
+            pass
 
 
 async def pending_count(db: Database) -> int:
@@ -275,4 +385,18 @@ async def dlq_retry(db: Database, dlq_id: int) -> bool:
             text("DELETE FROM crm_dlq WHERE id = :id"),
             {"id": dlq_id},
         )
+        # Refresh DLQ depth metric after requeue.
+        try:
+            result = await session.execute(
+                text(
+                    "SELECT provider, COUNT(*) as cnt FROM crm_dlq "
+                    "GROUP BY provider"
+                )
+            )
+            for provider_row in result.mappings().all():
+                CRM_DLQ_DEPTH.labels(provider=provider_row["provider"]).set(
+                    int(provider_row["cnt"])
+                )
+        except Exception:  # noqa: BLE001 - metric update must not break retry
+            pass
         return True

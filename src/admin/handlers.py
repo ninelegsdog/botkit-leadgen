@@ -11,6 +11,7 @@ from src.core.fsm import AdminAuth
 from src.core.nav import admin_menu, main_menu
 from src.crm import service as crm_service
 from src.crm.adapters import CrmSettings
+from src.crm.service import dlq_list
 from src.crm.worker import process_batch
 from src.leadgen import service
 
@@ -109,5 +110,21 @@ def create_admin_router(app_state: AppState) -> Router:
             f"CRM тест: outbox id={row_id}, провайдер={settings.provider}, "
             f"доставлено={delivered}."
         )
+
+    @router.message(Command("crm_dlq"))
+    async def cmd_crm_dlq(message: Message) -> None:
+        if not is_admin(message.from_user.id):  # type: ignore[union-attr]
+            return
+        rows = await dlq_list(db, limit=20)
+        if not rows:
+            await message.answer("DLQ пуста.")
+            return
+        lines = ["📬 DLQ (последние 20):"]
+        for r in rows:
+            lines.append(
+                f"• id={r['id']} lead={r['lead_id']} prov={r['provider']} "
+                f"attempts={r['attempts']} error={(r['last_error'] or '')[:80]}"
+            )
+        await message.answer("\n".join(lines))
 
     return router

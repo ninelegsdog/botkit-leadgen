@@ -17,6 +17,11 @@ from src.core.metrics import CRM_EXPORT_TOTAL, CRM_OUTBOX_PENDING
 from src.core.migrations import migrate
 from src.crm import service
 from src.crm.adapters import CrmPermanentError, CrmSettings, CrmTransientError, push
+from src.crm.service import (
+    check_idempotency_key,
+    record_idempotency_key,
+    update_idempotency_key_delivered,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -107,10 +112,37 @@ async def process_batch(
             await service.mark_failed(db, int(row["id"]), f"bad payload: {exc}")
             CRM_EXPORT_TOTAL.labels(provider=provider, status="failed").inc()
             continue
+        lead_id = int(row["lead_id"])
+        idempotency_key = f"lead-{lead_id}"
+
+        # Idempotency: if this key was already delivered, skip the CRM call.
+        cached = await check_idempotency_key(db, key=idempotency_key)
+        if cached is not None:
+            await service.mark_sent(db, int(row["id"]), cached["external_id"])
+            CRM_EXPORT_TOTAL.labels(provider=provider, status="sent").inc()
+            breaker.record_success(provider)
+            breaker.reset_probe(provider)
+            delivered += 1
+            logger.debug(
+                "Idempotency hit: lead=%s provider=%s key=%s external_id=%s",
+                lead_id, provider, idempotency_key, cached["external_id"],
+            )
+            continue
+
+        # Record the key as in-flight before calling the CRM.
+        await record_idempotency_key(
+            db, key=idempotency_key, provider=provider, lead_id=lead_id,
+            response_status="pending",
+        )
+
         try:
             external_id = await push(lead, settings, client)
         except CrmPermanentError as exc:
             await service.mark_failed(db, int(row["id"]), str(exc))
+            await record_idempotency_key(
+                db, key=idempotency_key, provider=provider, lead_id=lead_id,
+                response_status="failed", response_body=str(exc),
+            )
             CRM_EXPORT_TOTAL.labels(provider=provider, status="failed").inc()
             breaker.record_failure(provider)
             logger.error("CRM export failed permanently: lead=%s provider=%s: %s", row["lead_id"], provider, exc)
@@ -118,6 +150,10 @@ async def process_batch(
             await service.mark_retry(
                 db, int(row["id"]), int(row["attempts"]), str(exc), max_attempts,
                 backoff_seconds=backoff_seconds,
+            )
+            await record_idempotency_key(
+                db, key=idempotency_key, provider=provider, lead_id=lead_id,
+                response_status="retry", response_body=str(exc),
             )
             CRM_EXPORT_TOTAL.labels(provider=provider, status="retry").inc()
             breaker.record_failure(provider)
@@ -133,11 +169,19 @@ async def process_batch(
                 db, int(row["id"]), int(row["attempts"]), repr(exc), max_attempts,
                 backoff_seconds=backoff_seconds,
             )
+            await record_idempotency_key(
+                db, key=idempotency_key, provider=provider, lead_id=lead_id,
+                response_status="error", response_body=repr(exc),
+            )
             CRM_EXPORT_TOTAL.labels(provider=provider, status="retry").inc()
             breaker.record_failure(provider)
             logger.exception("CRM export crashed: lead=%s provider=%s", row["lead_id"], provider)
         else:
             await service.mark_sent(db, int(row["id"]), external_id)
+            await update_idempotency_key_delivered(
+                db, key=idempotency_key, external_id=external_id,
+                response_body="",
+            )
             CRM_EXPORT_TOTAL.labels(provider=provider, status="sent").inc()
             breaker.record_success(provider)
             breaker.reset_probe(provider)

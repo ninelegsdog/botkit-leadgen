@@ -4,6 +4,8 @@ from sqlalchemy import text
 
 from src.core.database import Database
 
+CRM_PAYLOAD_SCHEMA_VERSION = 1
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lead_fields (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -69,6 +71,9 @@ CREATE TABLE IF NOT EXISTS crm_outbox (
     next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
     last_error TEXT,
     external_id TEXT,
+    idempotency_key TEXT,
+    payload_version INTEGER NOT NULL DEFAULT 1,
+    correlation_id TEXT,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     claimed_by TEXT,
     claimed_at TEXT,
@@ -92,6 +97,26 @@ CREATE TABLE IF NOT EXISTS crm_dlq (
 
 CREATE INDEX IF NOT EXISTS idx_crm_dlq_provider ON crm_dlq(provider);
 CREATE INDEX IF NOT EXISTS idx_crm_dlq_failed_at ON crm_dlq(failed_at);
+
+CREATE TABLE IF NOT EXISTS crm_idempotency_keys (
+    key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    lead_id INTEGER NOT NULL,
+    response_status TEXT NOT NULL DEFAULT 'pending',
+    response_body TEXT,
+    external_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    delivered_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_idempotency_provider_lead
+    ON crm_idempotency_keys(provider, lead_id);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_idempotency_key
+    ON crm_outbox(idempotency_key);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_correlation_id
+    ON crm_outbox(correlation_id);
 """
 
 

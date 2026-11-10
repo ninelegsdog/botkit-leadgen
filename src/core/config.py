@@ -23,6 +23,9 @@ class Config:
     crm_webhook_secret: str = ""
     crm_base_url: str = ""
     crm_access_token: str = ""
+    crm_amocrm_refresh_token: str = ""
+    crm_amocrm_client_id: str = ""
+    crm_amocrm_client_secret: str = ""
     crm_bitrix_user_id: str = ""
     crm_bitrix_webhook_token: str = ""
     crm_timeout_seconds: float = 10.0
@@ -59,6 +62,9 @@ class Config:
             crm_webhook_secret=os.getenv("CRM_WEBHOOK_SECRET", ""),
             crm_base_url=os.getenv("CRM_BASE_URL", "").rstrip("/"),
             crm_access_token=os.getenv("CRM_ACCESS_TOKEN", ""),
+            crm_amocrm_refresh_token=os.getenv("CRM_AMOCRM_REFRESH_TOKEN", ""),
+            crm_amocrm_client_id=os.getenv("CRM_AMOCRM_CLIENT_ID", ""),
+            crm_amocrm_client_secret=os.getenv("CRM_AMOCRM_CLIENT_SECRET", ""),
             crm_bitrix_user_id=os.getenv("CRM_BITRIX_USER_ID", ""),
             crm_bitrix_webhook_token=os.getenv("CRM_BITRIX_WEBHOOK_TOKEN", ""),
             crm_timeout_seconds=float(os.getenv("CRM_TIMEOUT_SECONDS", "10")),
@@ -108,6 +114,9 @@ class Config:
                 for name, value in (
                     ("CRM_BASE_URL", self.crm_base_url),
                     ("CRM_ACCESS_TOKEN", self.crm_access_token),
+                    ("CRM_AMOCRM_REFRESH_TOKEN", self.crm_amocrm_refresh_token),
+                    ("CRM_AMOCRM_CLIENT_ID", self.crm_amocrm_client_id),
+                    ("CRM_AMOCRM_CLIENT_SECRET", self.crm_amocrm_client_secret),
                 )
                 if not value
             ]

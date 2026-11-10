@@ -36,6 +36,11 @@ CRM_OUTBOX_PENDING = Gauge(
     "bot_crm_outbox_pending",
     "CRM outbox rows waiting for delivery",
 )
+CRM_DLQ_DEPTH = Gauge(
+    "bot_crm_dlq_depth",
+    "CRM dead-letter queue depth by provider",
+    ["provider"],
+)
 ERRORS_TOTAL = BOTKIT_ERRORS_TOTAL
 
 
