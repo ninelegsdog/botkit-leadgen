@@ -19,6 +19,7 @@ from src.crm import service
 from src.crm.adapters import CrmPermanentError, CrmSettings, CrmTransientError, push
 from src.crm.service import (
     check_idempotency_key,
+    load_amocrm_access_token,
     record_idempotency_key,
     update_idempotency_key_delivered,
 )
@@ -136,7 +137,7 @@ async def process_batch(
         )
 
         try:
-            external_id = await push(lead, settings, client)
+            external_id = await push(lead, settings, client, db=db)
         except CrmPermanentError as exc:
             await service.mark_failed(db, int(row["id"]), str(exc))
             await record_idempotency_key(
@@ -195,6 +196,25 @@ async def worker_loop(db: Database, config: Config, stop_event: asyncio.Event) -
     if settings.provider == "off":
         logger.info("CRM export disabled (CRM_PROVIDER=off)")
         return
+    # Load persisted AmoCRM access token from DB if available (survives restarts).
+    if settings.provider == "amocrm":
+        persisted_token = await load_amocrm_access_token(db)
+        if persisted_token:
+            # dataclass is frozen — recreate with persisted token.
+            settings = CrmSettings(
+                provider=settings.provider,
+                webhook_url=settings.webhook_url,
+                webhook_secret=settings.webhook_secret,
+                base_url=settings.base_url,
+                access_token=persisted_token,
+                amocrm_refresh_token=settings.amocrm_refresh_token,
+                amocrm_client_id=settings.amocrm_client_id,
+                amocrm_client_secret=settings.amocrm_client_secret,
+                bitrix_user_id=settings.bitrix_user_id,
+                bitrix_webhook_token=settings.bitrix_webhook_token,
+                timeout=settings.timeout,
+            )
+            logger.info("Loaded persisted AmoCRM access token from DB")
     logger.info("CRM export worker started: provider=%s", settings.provider)
     # Single HTTP client reused across all batches — avoids TCP/TLS handshake per lead.
     timeout = httpx.Timeout(settings.timeout, connect=5.0)
