@@ -4,6 +4,8 @@ from sqlalchemy import text
 
 from src.core.database import Database
 
+CRM_PAYLOAD_SCHEMA_VERSION = 1
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS lead_fields (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -58,12 +60,89 @@ CREATE TABLE IF NOT EXISTS settings (
 CREATE INDEX IF NOT EXISTS idx_leads_status ON leads(status, taken_at);
 CREATE INDEX IF NOT EXISTS idx_leads_client ON leads(client_user_id);
 CREATE INDEX IF NOT EXISTS idx_lead_events_lead ON lead_events(lead_id);
+
+CREATE TABLE IF NOT EXISTS crm_outbox (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    lead_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending',
+    attempts INTEGER NOT NULL DEFAULT 0,
+    next_attempt_at TEXT NOT NULL DEFAULT (datetime('now')),
+    last_error TEXT,
+    external_id TEXT,
+    idempotency_key TEXT,
+    payload_version INTEGER NOT NULL DEFAULT 1,
+    correlation_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    claimed_by TEXT,
+    claimed_at TEXT,
+    UNIQUE (lead_id, provider)
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_due ON crm_outbox(status, next_attempt_at);
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_claimed ON crm_outbox(claimed_by, claimed_at);
+
+CREATE TABLE IF NOT EXISTS crm_dlq (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    outbox_id INTEGER NOT NULL,
+    lead_id INTEGER NOT NULL,
+    provider TEXT NOT NULL,
+    payload TEXT NOT NULL,
+    attempts INTEGER NOT NULL DEFAULT 0,
+    last_error TEXT,
+    failed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (outbox_id)
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_dlq_provider ON crm_dlq(provider);
+CREATE INDEX IF NOT EXISTS idx_crm_dlq_failed_at ON crm_dlq(failed_at);
+
+CREATE TABLE IF NOT EXISTS crm_idempotency_keys (
+    key TEXT PRIMARY KEY,
+    provider TEXT NOT NULL,
+    lead_id INTEGER NOT NULL,
+    response_status TEXT NOT NULL DEFAULT 'pending',
+    response_body TEXT,
+    external_id TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    delivered_at TEXT
+);
+
+CREATE INDEX IF NOT EXISTS idx_crm_idempotency_provider_lead
+    ON crm_idempotency_keys(provider, lead_id);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_idempotency_key
+    ON crm_outbox(idempotency_key);
+
+CREATE INDEX IF NOT EXISTS idx_crm_outbox_correlation_id
+    ON crm_outbox(correlation_id);
 """
 
 
 async def migrate(db: Database) -> None:
-    async with db.transaction() as conn:
-        for statement in SCHEMA.strip().split(";"):
-            stmt = statement.strip()
-            if stmt:
-                await conn.execute(text(stmt))
+    """Apply schema migrations via Alembic.
+
+    Falls back to raw SQL execution if Alembic is not available or the
+    alembic_version table does not exist yet (first-time deploy).
+    """
+    try:
+        import asyncio
+
+        from alembic.config import Config as AlembicConfig
+
+        from alembic import command
+
+        alembic_cfg = AlembicConfig("alembic.ini")
+        alembic_cfg.set_main_option(
+            "sqlalchemy.url", db.url
+        )
+        # Run alembic upgrade head in a thread since it's blocking.
+        await asyncio.to_thread(command.upgrade, alembic_cfg, "head")
+    except Exception:
+        # Fallback: raw SQL execution for first-time deploys without alembic_version table.
+        async with db.transaction() as conn:
+            for statement in SCHEMA.strip().split(";"):
+                stmt = statement.strip()
+                if stmt:
+                    await conn.execute(text(stmt))

@@ -97,6 +97,7 @@ def create_leadgen_router(app_state: AppState) -> Router:
             client_name=data.get("name"),
             client_phone=data.get("phone"),
             field_values=json.dumps({"Интерес": data.get("service", "")}),
+            crm_provider=app_state.config.crm_provider,
         )
         app_state.metrics.inc_leads()
         await state.clear()

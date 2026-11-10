@@ -19,6 +19,7 @@ from src.core.sentry import init_sentry
 from src.core.tgwebhook import build_webhook_app
 from src.core.throttling import ThrottlingMiddleware
 from src.core.tracing import setup_tracing
+from src.crm.worker import worker_loop
 from src.escalation.scheduler import escalation_loop
 
 
@@ -91,6 +92,8 @@ async def main() -> None:
 
     shutdown_event = asyncio.Event()
 
+    crm_task = asyncio.create_task(worker_loop(state.db, state.config, shutdown_event))
+
     def _signal_handler() -> None:
         shutdown_event.set()
 
@@ -105,10 +108,12 @@ async def main() -> None:
             await _run_polling(state, shutdown_event)
     finally:
         escalation_task.cancel()
-        try:
-            await escalation_task
-        except asyncio.CancelledError:
-            pass
+        crm_task.cancel()
+        for task in (escalation_task, crm_task):
+            try:
+                await task
+            except (asyncio.CancelledError, Exception):
+                pass
 
 
 if __name__ == "__main__":

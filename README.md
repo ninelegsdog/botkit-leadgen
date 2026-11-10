@@ -79,6 +79,15 @@ is not declared there.
 | `WEBHOOK_SECRET` | no | yes |
 | `WEBHOOK_URL` | no | no |
 
+## CRM export
+
+Leads are written to a SQLite outbox (`crm_outbox`) in the same transaction as the lead,
+then delivered by a background worker. Provider is selected with `CRM_PROVIDER`
+(`off`, `generic`, `bitrix24`, `amocrm`). See `src/crm/` and `src/crm/worker.py`.
+
+Manual retry: `python -m src.crm.worker --once --retry-failed`.
+Connectivity check: send `/crm_test` to the bot as an admin.
+
 "Holds a secret" is classified by variable name, not by reading the value. Treat every `yes` as sensitive regardless.
 
 Secrets never enter git: `.env` is ignored, and CI runs a gitleaks gate over the
@@ -115,6 +124,7 @@ scans the filesystem with Trivy, and validates the k6 load script.
 src/
 ├── admin/  handlers.py
 ├── core/  auth.py, bot_factory.py, callbacks.py, config.py, database.py, errors.py
+├── crm/  adapters.py, service.py, worker.py
 ├── escalation/  scheduler.py
 └── leadgen/  handlers.py, service.py
 ```

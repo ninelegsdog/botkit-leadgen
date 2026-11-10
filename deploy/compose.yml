@@ -30,6 +30,16 @@ services:
       - REDIS_URL=${REDIS_URL}
       - DATABASE_URL=sqlite+aiosqlite:///./data/bot.db
       - DB_PATH=./data/bot.db
+      - CRM_PROVIDER=${CRM_PROVIDER:-off}
+      - CRM_WEBHOOK_URL=${CRM_WEBHOOK_URL:-}
+      - CRM_WEBHOOK_SECRET=${CRM_WEBHOOK_SECRET:-}
+      - CRM_BASE_URL=${CRM_BASE_URL:-}
+      - CRM_ACCESS_TOKEN=${CRM_ACCESS_TOKEN:-}
+      - CRM_BITRIX_USER_ID=${CRM_BITRIX_USER_ID:-}
+      - CRM_BITRIX_WEBHOOK_TOKEN=${CRM_BITRIX_WEBHOOK_TOKEN:-}
+      - CRM_TIMEOUT_SECONDS=${CRM_TIMEOUT_SECONDS:-10}
+      - CRM_POLL_SECONDS=${CRM_POLL_SECONDS:-15}
+      - CRM_MAX_ATTEMPTS=${CRM_MAX_ATTEMPTS:-6}
       - OTEL_EXPORTER_OTLP_ENDPOINT=http://host.docker.internal:4318/v1/traces
     ports:
       - "127.0.0.1:${METRICS_PORT}:${METRICS_PORT}"

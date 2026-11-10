@@ -11,7 +11,7 @@ from botkit_core.metrics import (
     BOTKIT_ERRORS_TOTAL,
     BOTKIT_UPDATES_TOTAL,
 )
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, generate_latest
 
 try:
     from botkit_core import __version__ as _core_version
@@ -25,6 +25,21 @@ UPDATES_TOTAL = BOTKIT_UPDATES_TOTAL
 LEADS_TOTAL = Counter(
     "bot_leads_total",
     "Leads created",
+)
+
+CRM_EXPORT_TOTAL = Counter(
+    "bot_crm_export_total",
+    "CRM export outcomes by provider",
+    ["provider", "status"],
+)
+CRM_OUTBOX_PENDING = Gauge(
+    "bot_crm_outbox_pending",
+    "CRM outbox rows waiting for delivery",
+)
+CRM_DLQ_DEPTH = Gauge(
+    "bot_crm_dlq_depth",
+    "CRM dead-letter queue depth by provider",
+    ["provider"],
 )
 ERRORS_TOTAL = BOTKIT_ERRORS_TOTAL
 
