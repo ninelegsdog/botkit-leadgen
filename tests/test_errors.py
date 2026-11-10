@@ -31,7 +31,7 @@ async def test_network_error_handled() -> None:
 
 async def test_unhandled_logged(caplog: Any) -> None:
     await default_error_handler(event=None, exception=ValueError("x"))  # type: ignore[arg-type]
-    assert any("Unhandled error" in r.message for r in caplog.records)
+    assert "Unhandled error" in caplog.text
 
 
 def test_register_error_handler_on_dispatcher() -> None:
