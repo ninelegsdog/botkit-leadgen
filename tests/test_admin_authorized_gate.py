@@ -15,7 +15,6 @@ import pytest
 
 from src.admin.handlers import create_admin_router
 from src.core.config import Config
-from src.core.nav import admin_menu, main_menu
 
 
 def _state(admin_ids: list[int]) -> Any:
