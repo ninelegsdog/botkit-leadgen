@@ -164,6 +164,6 @@ jobs:
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1  # v5.0.0
       - name: Setup k6
-        uses: grafana/setup-k6-action@43b9fc21641a76002687994433dd586f56e791b1  # v1  # v1
+        uses: grafana/setup-k6-action@c47136d33d365efbeb9ae7266908b5dcf98cdece  # v1  # v1
       - name: Validate k6 script
         run: k6 run --vus 1 --iterations 1 load-test.js --out /dev/null || echo "k6 script valid (no server, expected fail)"
