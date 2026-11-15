@@ -15,7 +15,6 @@ from src.core.errors import RetryMiddleware, register_error_handler
 from src.core.logging import LoggingMiddleware, setup_logging
 from src.core.metrics import UpdatesMiddleware, health, metrics, start_metrics_server, version
 from src.core.migrations import migrate
-from src.core.sentry import init_sentry
 from src.core.tgwebhook import build_webhook_app
 from src.core.throttling import ThrottlingMiddleware
 from src.core.tracing import setup_tracing
@@ -75,7 +74,6 @@ async def main() -> None:
     state.config.validate()
     setup_logging(level="INFO", json=True, bot_name="leadgen")
     setup_tracing(service_name="leadgen")
-    init_sentry(state.config.sentry_dsn)
     await migrate(state.db)
     state.dp.message.middleware(AuthMiddleware(state.db))
     state.dp.message.middleware(ThrottlingMiddleware(redis_url=state.config.redis_url))
