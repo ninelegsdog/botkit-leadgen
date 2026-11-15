@@ -13,6 +13,18 @@ from src.core.metrics import ERRORS_TOTAL
 logger = logging.getLogger(__name__)
 
 
+# Pre-initialize the error-type series with zero so that the metric exists (and the
+# SLO rules see it) even before the first real error. A labeled Counter only materializes
+# a series on the first .inc(), which left botkit_errors_total absent on a healthy fleet
+# and made the error-budget alerts (BotErrorSpike, BotErrorBudgetBurn*) permanently inert.
+_ERROR_TYPES = ("retry_after", "network", "unhandled", "domain")
+
+
+def init_error_metrics() -> None:
+    for error_type in _ERROR_TYPES:
+        ERRORS_TOTAL.labels(error_type=error_type).inc(0)
+
+
 async def default_error_handler(event: TelegramObject, exception: Exception) -> None:
     if isinstance(exception, TelegramRetryAfter):
         ERRORS_TOTAL.labels(error_type="retry_after").inc()
@@ -28,6 +40,9 @@ async def default_error_handler(event: TelegramObject, exception: Exception) -> 
 
 
 def register_error_handler(dp: Any) -> None:
+    # Ensure the error series exist before any error can fire: absent series == absent metric.
+    init_error_metrics()
+
     @dp.error()  # type: ignore[untyped-decorator]
     async def _on_error(event: ErrorEvent) -> None:
         await default_error_handler(event, event.exception)
