@@ -217,7 +217,6 @@ dependencies = [
     { name = "httpx" },
     { name = "prometheus-client" },
     { name = "redis" },
-    { name = "sentry-sdk" },
     { name = "sqlalchemy", extra = ["asyncio"] },
     { name = "yookassa" },
 ]
@@ -259,7 +258,6 @@ requires-dist = [
     { name = "redis", specifier = ">=5.0" },
     { name = "requests", marker = "extra == 'dev'", specifier = ">=2.31" },
     { name = "ruff", marker = "extra == 'dev'", specifier = ">=0.8" },
-    { name = "sentry-sdk", specifier = ">=2.0" },
     { name = "sqlalchemy", extras = ["asyncio"], specifier = ">=2.0" },
     { name = "telethon", marker = "extra == 'e2e'", specifier = ">=1.34" },
     { name = "testcontainers", extras = ["postgres", "redis"], marker = "extra == 'dev'", specifier = ">=4.10" },

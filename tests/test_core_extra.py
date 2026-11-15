@@ -33,7 +33,6 @@ from src.core.metrics import (
     start_metrics_server,
 )
 from src.core.nav import admin_menu, main_menu, manager_menu
-from src.core.sentry import init_sentry
 from src.core.ui import escape, lead_card, lead_summary, mask_phone
 from src.core.webhook import create_app as create_webhook_app
 from src.escalation import scheduler as esc_scheduler
@@ -246,20 +245,6 @@ def test_create_metrics_app() -> None:
 async def test_start_metrics_server() -> None:
     runner = await start_metrics_server(18099)
     await runner.cleanup()
-
-
-# --- sentry ---
-def test_init_sentry_no_dsn() -> None:
-    init_sentry(None)
-
-
-def test_init_sentry_missing_sdk() -> None:
-    with patch.dict("sys.modules", {"sentry_sdk": None}):
-        init_sentry("https://abc@sentry.io/1")
-
-
-def test_init_sentry_with_sdk() -> None:
-    init_sentry("https://abc@sentry.io/1")
 
 
 # --- fsm / nav / ui / auth ---
